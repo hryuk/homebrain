@@ -1,0 +1,24 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: homebrain-agent
+
+logging:
+  level:
+    root: ${LOG_LEVEL:info}
+    com.homebrain: ${LOG_LEVEL:info}
+    com.embabel: ${LOG_LEVEL:info}
+
+# Embabel Agent configuration
+embabel:
+  models:
+    default-llm: claude-sonnet-4-5
+
+# Application configuration
+app:
+  engine:
+    url: ${ENGINE_URL:http://engine:9000}
+  automations:
+    path: ${AUTOMATIONS_PATH:/app/automations}

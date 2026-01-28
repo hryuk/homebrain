@@ -1,0 +1,43 @@
+services:
+  web:
+    build: ./web
+    ports:
+      - "5173:5173"
+    depends_on:
+      - agent
+    environment:
+      - API_URL=http://agent:8080
+
+  agent:
+    build: ./agent
+    ports:
+      - "8080:8080"
+    environment:
+      - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-codellama}
+      - ENGINE_URL=http://engine:9000
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ./automations:/app/automations
+    depends_on:
+      - engine
+
+  engine:
+    build: ./engine
+    ports:
+      - "9000:9000"
+    environment:
+      - MQTT_BROKER=${MQTT_BROKER}
+      - MQTT_USERNAME=${MQTT_USERNAME}
+      - MQTT_PASSWORD=${MQTT_PASSWORD}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ./automations:/app/automations
+      - engine-state:/app/state
+    restart: unless-stopped
+
+volumes:
+  engine-state:
