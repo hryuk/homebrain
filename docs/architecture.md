@@ -69,7 +69,8 @@ Homebrain is a Docker-based, code-first solution for orchestrating MQTT automati
 │  ├── AutomationController - CRUD for automations            │
 │  ├── TopicsController    - MQTT topic discovery             │
 │  ├── LogsController      - Log retrieval                    │
-│  └── HistoryController   - Git history                      │
+│  ├── HistoryController   - Git history                      │
+│  └── HealthController    - Health check endpoint            │
 ├─────────────────────────────────────────────────────────────┤
 │  Embabel Agents                                              │
 │  ├── ConversationalChatAgent - Main chat interface          │
@@ -99,6 +100,7 @@ Homebrain is a Docker-based, code-first solution for orchestrating MQTT automati
 | GET | `/api/topics` | List discovered MQTT topics |
 | GET | `/api/logs` | Get recent logs |
 | GET | `/api/history` | Get git commit history |
+| GET | `/health` | Health check (returns "ok") |
 | WS | `/ws/logs` | Real-time log stream |
 
 ### 3. Automation Engine (`/engine`)

@@ -50,6 +50,7 @@
     - `TopicsController.kt` - MQTT topic discovery
     - `LogsController.kt` - Log retrieval
     - `HistoryController.kt` - Git history
+    - `HealthController.kt` - Health check endpoint
   - `agent/` - Embabel agents
     - `ConversationalChatAgent.kt` - Main chat with tool support
     - `AutomationCodeAgent.kt` - Code generation pipeline
@@ -59,7 +60,10 @@
     - `EngineProxyService.kt` - Engine API client
     - `GitService.kt` - Git operations with JGit
   - `domain/` - Domain models
+    - `ChatModels.kt` - Chat response and code proposal models
+    - `CodeGenerationModels.kt` - Pipeline state models for code generation
   - `dto/` - API DTOs
+    - `DTOs.kt` - Request/response DTOs for REST API
 
 ### Web UI (`/web`)
 - `src/App.tsx` - Main app with tab navigation
@@ -103,6 +107,7 @@ cd web && npm run dev
 | GET | `/api/topics` | List discovered MQTT topics |
 | GET | `/api/logs` | Get recent logs |
 | GET | `/api/history` | Git commit history |
+| GET | `/health` | Health check (returns "ok") |
 | WS | `/ws/logs` | Real-time log stream |
 
 ### Engine API (`:9000`, internal)
@@ -153,8 +158,11 @@ ANTHROPIC_API_KEY=sk-ant-...
 MQTT_USERNAME=
 MQTT_PASSWORD=
 LOG_LEVEL=info
-ENGINE_URL=http://engine:9000  # For agent
+ENGINE_URL=http://engine:9000      # For agent
+AUTOMATIONS_PATH=/app/automations  # For agent
 ```
+
+**Note:** The default LLM model is `claude-sonnet-4-5` (configured in `application.yml`).
 
 ## Embabel Agent Framework
 

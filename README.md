@@ -9,7 +9,7 @@ AI-powered MQTT automation orchestrator. Describe automations in plain English, 
 - **Code-First** - Automations are git-tracked Starlark scripts
 - **Hot Reload** - Changes deploy automatically
 - **Sandboxed** - Safe execution with controlled MQTT-only access
-- **Pluggable LLMs** - Anthropic Claude, OpenAI, or local Ollama
+- **Powered by Claude** - Uses Anthropic's Claude for intelligent code generation
 
 ## Quick Start
 
@@ -18,7 +18,7 @@ AI-powered MQTT automation orchestrator. Describe automations in plain English, 
    cp .env.example .env
    # Edit .env with your settings:
    # - MQTT_BROKER (required)
-   # - LLM_PROVIDER and API key
+   # - ANTHROPIC_API_KEY (required)
    ```
 
 2. **Run:**
@@ -36,7 +36,7 @@ AI-powered MQTT automation orchestrator. Describe automations in plain English, 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────────┐
 │   Web UI    │◄───►│  Agent API  │◄───►│ Automation      │
-│  (SolidJS)  │     │    (Go)     │     │ Engine (Go)     │
+│  (SolidJS)  │     │  (Kotlin)   │     │ Engine (Go)     │
 │   :5173     │     │   :8080     │     │   :9000         │
 └─────────────┘     └──────┬──────┘     └────────┬────────┘
                            │                     │
@@ -90,11 +90,8 @@ config = {
 | `MQTT_BROKER` | MQTT broker URL | Required |
 | `MQTT_USERNAME` | MQTT username | - |
 | `MQTT_PASSWORD` | MQTT password | - |
-| `LLM_PROVIDER` | `anthropic`, `openai`, `ollama` | `anthropic` |
-| `ANTHROPIC_API_KEY` | Anthropic API key | - |
-| `OPENAI_API_KEY` | OpenAI API key | - |
-| `OLLAMA_URL` | Ollama server URL | `http://localhost:11434` |
-| `OLLAMA_MODEL` | Ollama model name | `codellama` |
+| `ANTHROPIC_API_KEY` | Anthropic API key | Required |
+| `LOG_LEVEL` | Logging level | `info` |
 
 ## License
 

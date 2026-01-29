@@ -53,14 +53,19 @@ Required environment variables:
 - `ENGINE_URL` - Engine API URL (default: `http://localhost:9000`)
 - `AUTOMATIONS_PATH` - Path to automations directory (default: `../automations`)
 
-Configuration in `application.properties`:
-```properties
+Configuration in `application.yml`:
+```yaml
 # Embabel configuration
-embabel.llm.anthropic.api-key=${ANTHROPIC_API_KEY}
-embabel.llm.default-model=claude-sonnet-4-20250514
+embabel:
+  models:
+    default-llm: claude-sonnet-4-5
 
-# Engine connection
-engine.url=${ENGINE_URL:http://localhost:9000}
+# Application configuration
+app:
+  engine:
+    url: ${ENGINE_URL:http://localhost:9000}
+  automations:
+    path: ${AUTOMATIONS_PATH:../automations}
 ```
 
 ### Engine (Go)
@@ -100,7 +105,8 @@ homebrain/
 │   │   │   ├── AutomationController.kt  # CRUD operations
 │   │   │   ├── TopicsController.kt      # MQTT topics
 │   │   │   ├── LogsController.kt        # Log retrieval
-│   │   │   └── HistoryController.kt     # Git history
+│   │   │   ├── HistoryController.kt     # Git history
+│   │   │   └── HealthController.kt      # Health check
 │   │   ├── agent/                       # Embabel agents
 │   │   │   ├── ConversationalChatAgent.kt  # Main chat agent
 │   │   │   └── AutomationCodeAgent.kt      # Code generation
@@ -110,10 +116,13 @@ homebrain/
 │   │   │   ├── EngineProxyService.kt    # Engine communication
 │   │   │   └── GitService.kt            # Git operations
 │   │   ├── domain/                      # Domain models
+│   │   │   ├── ChatModels.kt            # Chat response models
+│   │   │   └── CodeGenerationModels.kt  # Code gen pipeline models
 │   │   ├── dto/                         # API DTOs
+│   │   │   └── DTOs.kt                  # Request/response DTOs
 │   │   └── config/                      # Spring configuration
 │   └── src/main/resources/
-│       └── application.properties
+│       └── application.yml
 │
 ├── engine/                     # Automation Engine (Go)
 │   ├── main.go                 # Entry point
