@@ -3,13 +3,16 @@ FROM gradle:8.12-jdk21-alpine AS builder
 
 WORKDIR /build
 
-# Copy Gradle files first for better caching
+# Copy Gradle files first for dependency caching
 COPY build.gradle.kts settings.gradle.kts ./
 
-# Copy source
+# Download dependencies (cached unless build.gradle.kts changes)
+RUN gradle dependencies --no-daemon
+
+# Copy source (separate layer)
 COPY src ./src
 
-# Build the application
+# Build the application (uses cached dependencies)
 RUN gradle bootJar --no-daemon
 
 # Runtime stage
