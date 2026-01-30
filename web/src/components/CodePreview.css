@@ -82,6 +82,42 @@
   border-bottom: 1px solid #333;
 }
 
+.code-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.file-type-badge {
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.file-type-badge.library {
+  background: #1e3a5f;
+  color: #79c0ff;
+  border: 1px solid #2d4a6f;
+}
+
+.file-type-badge.automation {
+  background: #1e3a1e;
+  color: #7ee787;
+  border: 1px solid #2d5a2d;
+}
+
+.code-preview.library {
+  border-color: #2d4a6f;
+}
+
+.code-preview.library .code-header {
+  background: #152238;
+  border-bottom-color: #2d4a6f;
+}
+
 .filename {
   font-family: 'Monaco', 'Menlo', monospace;
   font-size: 0.85rem;

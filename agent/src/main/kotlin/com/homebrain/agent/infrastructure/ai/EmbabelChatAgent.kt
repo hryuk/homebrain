@@ -6,6 +6,7 @@ import com.embabel.agent.api.annotation.Agent
 import com.embabel.agent.api.common.Ai
 import com.homebrain.agent.domain.conversation.ChatResponse
 import com.homebrain.agent.domain.conversation.CodeProposal
+import com.homebrain.agent.domain.conversation.FileProposal
 import com.homebrain.agent.domain.conversation.Message
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Component
@@ -29,10 +30,23 @@ data class EmbabelChatResponse(
     val codeProposal: EmbabelCodeProposal? = null
 )
 
+/**
+ * Code proposal from the LLM supporting multiple files.
+ * When the LLM creates reusable library functions, it proposes both
+ * the library and the automation together.
+ */
 data class EmbabelCodeProposal(
+    val summary: String,
+    val files: List<EmbabelFileProposal>
+)
+
+/**
+ * A single file in a code proposal.
+ */
+data class EmbabelFileProposal(
     val code: String,
     val filename: String,
-    val summary: String
+    val type: String  // "automation" or "library"
 )
 
 /**
@@ -64,11 +78,16 @@ class EmbabelChatAgent(
         // Convert to domain model
         return ChatResponse(
             message = embabelResponse.message,
-            codeProposal = embabelResponse.codeProposal?.let {
+            codeProposal = embabelResponse.codeProposal?.let { proposal ->
                 CodeProposal(
-                    code = it.code,
-                    filename = it.filename,
-                    summary = it.summary
+                    summary = proposal.summary,
+                    files = proposal.files.map { file ->
+                        FileProposal(
+                            code = file.code,
+                            filename = file.filename,
+                            type = FileProposal.FileType.fromString(file.type)
+                        )
+                    }
                 )
             }
         )
@@ -118,8 +137,88 @@ You have access to tools to query the smart home:
 - Use tools to find relevant topics
 - Check global state schema to avoid conflicts
 - Explain what you'll create in the message
-- Include the code in codeProposal
+- Include the code in codeProposal with one or more files
 - The user must confirm before it's deployed
+
+## When to Create Library Functions (IMPORTANT)
+
+**ALWAYS create a NEW library function when the automation involves:**
+
+1. **Generic device operations** that could apply to multiple devices:
+   - Blinking, flashing, or pulsing lights
+   - Fading or ramping brightness over time
+   - Toggle sequences or cycling through states
+   - Sending multiple commands with delays
+
+2. **State management patterns**:
+   - Tracking history (last N values, moving averages)
+   - Aggregating data from multiple sensors
+   - State machines or multi-step workflows
+   - Cooldowns or rate limiting beyond simple debounce
+
+3. **Multi-device coordination**:
+   - Scenes (setting multiple devices to specific states)
+   - Sequences (timed series of actions across devices)
+   - Group operations (all lights, all sensors, etc.)
+   - Cascading effects (one action triggers delayed others)
+
+**DO NOT create library functions for:**
+- Simple on/off logic with a single topic
+- Device-specific configurations that won't be reused
+- One-off scheduled tasks
+- Direct pass-through of sensor data
+
+## Code Proposal Format
+
+When proposing code, use codeProposal with files array. Each file has:
+- code: The Starlark source code
+- filename: Path relative to automations/ (e.g., "lib/lights.lib.star" or "blink_kitchen.star")
+- type: Either "library" or "automation"
+
+**Single automation (no reusable logic):**
+{
+  "summary": "Turn on light when motion detected",
+  "files": [
+    {"code": "...", "filename": "motion_light.star", "type": "automation"}
+  ]
+}
+
+**Library + automation (reusable logic - PREFERRED):**
+{
+  "summary": "Blink kitchen light with new blink library function",
+  "files": [
+    {"code": "...", "filename": "lib/lights.lib.star", "type": "library"},
+    {"code": "...", "filename": "blink_kitchen.star", "type": "automation"}
+  ]
+}
+
+## Examples: Library vs Inline
+
+**Example 1: User asks "blink the kitchen light 3 times"**
+
+CORRECT (create library function):
+- Create lib/lights.lib.star with blink(ctx, topic, count, interval_ms) function
+- Create blink_kitchen.star automation that uses ctx.lib.lights.blink()
+
+WRONG (inline logic):
+- Create automation with inline loop/state for blinking
+
+**Example 2: User asks "create a bedtime scene"**
+
+CORRECT (create library function):
+- Create lib/scenes.lib.star with apply_scene(ctx, scene_config) function
+- Create bedtime_scene.star automation that defines scene and calls ctx.lib.scenes.apply_scene()
+
+WRONG (inline logic):
+- Create automation with hardcoded device commands
+
+**Example 3: User asks "turn off living room light at 11pm"**
+
+CORRECT (simple, no library needed):
+- Create scheduled automation with simple ctx.publish() call
+
+WRONG (over-engineering):
+- Creating a library function for a single scheduled action
 
 ## Homebrain Framework Features
 
@@ -127,7 +226,7 @@ You have access to tools to query the smart home:
 - Reusable function libraries in automations/lib/*.lib.star
 - Access via ctx.lib.modulename.function()
 - Before creating new utility functions, check getLibraryModules() for existing ones
-- Suggest creating library modules for functions that could be shared
+- When adding functions to existing modules, use getLibraryCode() to see current implementation
 - Example: ctx.lib.timers.debounce_check(ctx, "motion_light", 300)
 
 **Global State:**
@@ -170,61 +269,87 @@ Available ctx functions:
 - ctx.now() - Get current Unix timestamp
 - ctx.lib.modulename.function(...) - Call library functions
 
-Example automation with global state and library:
+Example automation using library:
 def on_message(topic, payload, ctx):
     data = ctx.json_decode(payload)
-    if data.get("occupancy"):
-        # Use library debounce function
-        if ctx.lib.timers.debounce_check(ctx, "hallway_motion", 300):
-            ctx.publish("zigbee2mqtt/hallway_light/set", ctx.json_encode({"state": "ON"}))
-            ctx.log("Motion detected - light on")
-            # Update global presence state
-            ctx.set_global("presence.hallway.last_motion", ctx.now())
+    if data.get("action") == "double_tap":
+        # Use library function for blinking
+        ctx.lib.lights.blink(ctx, "zigbee2mqtt/kitchen_light/set", 3, 500)
 
 config = {
-    "name": "Hallway Motion Light",
-    "description": "Turn on hallway light on motion with 5min debounce",
-    "subscribe": ["zigbee2mqtt/hallway_motion"],
-    "global_state_writes": ["presence.hallway.*"],  # Allowed to write presence.hallway.* keys
+    "name": "Double Tap Blink",
+    "description": "Blink kitchen light on double tap",
+    "subscribe": ["zigbee2mqtt/kitchen_switch"],
     "enabled": True,
 }
 
-**Library Module (if proposing a new library):**
-Pure functions only, no config or callbacks. Use .lib.star extension.
+**Library Module Format:**
+Pure functions only, no config or callbacks. Filename must end with .lib.star and be in lib/ folder.
 Add docstrings to functions for documentation.
 
-Example library module:
-\"\"\"Helper functions for X.\"\"\"
+Example library module (lib/lights.lib.star):
+\"\"\"Light control utilities for common operations.\"\"\"
 
-def my_function(ctx, param1, param2):
-    \"\"\"Description of what this does.
+def blink(ctx, topic, count, interval_ms):
+    \"\"\"Blink a light by toggling it on and off.
+    
+    Note: Due to Starlark limitations, this uses state-based iteration.
+    Each message received advances the blink sequence.
     
     Args:
         ctx: The automation context
-        param1: Description
-        param2: Description
-        
-    Returns:
-        Description
+        topic: MQTT topic for the light (e.g., "zigbee2mqtt/light/set")
+        count: Number of times to blink
+        interval_ms: Milliseconds between state changes
         
     Example:
-        result = ctx.lib.mymodule.my_function(ctx, "value1", "value2")
+        ctx.lib.lights.blink(ctx, "zigbee2mqtt/kitchen_light/set", 3, 500)
     \"\"\"
-    # Implementation
-    return result
+    # Publish ON command
+    ctx.publish(topic, ctx.json_encode({"state": "ON"}))
+    ctx.log("Blink: ON (" + str(count) + " remaining)")
+    
+    # Store blink state for continuation
+    ctx.set_state("blink_count", count)
+    ctx.set_state("blink_topic", topic)
+    ctx.set_state("blink_interval", interval_ms)
+
+def fade(ctx, topic, start_brightness, end_brightness, steps, step_delay_ms):
+    \"\"\"Fade a light from one brightness to another.
+    
+    Args:
+        ctx: The automation context
+        topic: MQTT topic for the light
+        start_brightness: Starting brightness (0-255)
+        end_brightness: Target brightness (0-255)
+        steps: Number of steps in the fade
+        step_delay_ms: Delay between steps in milliseconds
+        
+    Example:
+        ctx.lib.lights.fade(ctx, "zigbee2mqtt/bedroom_light/set", 255, 0, 10, 100)
+    \"\"\"
+    brightness_step = (end_brightness - start_brightness) / steps
+    current = start_brightness
+    
+    ctx.set_state("fade_topic", topic)
+    ctx.set_state("fade_current", current)
+    ctx.set_state("fade_step", brightness_step)
+    ctx.set_state("fade_remaining", steps)
+    ctx.publish(topic, ctx.json_encode({"brightness": int(current)}))
 
 ## Rules
 
-1. Always check getLibraryModules() before creating new automations
-2. Reuse library functions when applicable (timers, utils, presence, etc.)
-3. Use tools to get real topic names - don't guess
-4. Check getGlobalStateSchema() before using global state
-5. Declare global_state_writes in config for any global state keys you write to
-6. Use wildcards in global_state_writes for key prefixes (e.g., "presence.room.*")
+1. ALWAYS check getLibraryModules() before creating new automations
+2. CREATE library functions for generic device operations, state patterns, and multi-device coordination
+3. REUSE existing library functions when applicable (timers, utils, presence, lights, etc.)
+4. Use tools to get real topic names - don't guess
+5. Check getGlobalStateSchema() before using global state
+6. Declare global_state_writes in config for any global state keys you write to
 7. For questions, keep codeProposal as null
 8. Only propose code when the user wants to create or modify an automation
 9. Use descriptive filenames (lowercase, underscores, no spaces)
-10. Suggest creating library modules for reusable logic
+10. When creating libraries, add them to existing modules if the function fits, otherwise create new modules
+11. Library filenames MUST be in lib/ folder and end with .lib.star (e.g., "lib/lights.lib.star")
 """.trimIndent()
     }
 }

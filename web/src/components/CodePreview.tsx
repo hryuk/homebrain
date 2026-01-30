@@ -1,4 +1,4 @@
-import { createSignal, createEffect } from 'solid-js'
+import { createSignal, createEffect, Show } from 'solid-js'
 import hljs from 'highlight.js/lib/core'
 import python from 'highlight.js/lib/languages/python'
 import './CodePreview.css'
@@ -9,6 +9,7 @@ hljs.registerLanguage('python', python)
 interface CodePreviewProps {
   code: string
   filename: string
+  type?: 'automation' | 'library'
   editable?: boolean
   onCodeChange?: (code: string) => void
 }
@@ -44,10 +45,21 @@ export default function CodePreview(props: CodePreviewProps) {
     props.onCodeChange?.(newCode)
   }
 
+  const getTypeLabel = () => {
+    if (props.type === 'library') return 'Library'
+    if (props.type === 'automation') return 'Automation'
+    return null
+  }
+
   return (
-    <div class="code-preview">
+    <div class={`code-preview ${props.type === 'library' ? 'library' : ''}`}>
       <div class="code-header">
-        <span class="filename">{props.filename}</span>
+        <div class="code-header-left">
+          <Show when={getTypeLabel()}>
+            <span class={`file-type-badge ${props.type}`}>{getTypeLabel()}</span>
+          </Show>
+          <span class="filename">{props.filename}</span>
+        </div>
         <button class="copy-btn" onClick={copyCode}>
           {copied() ? 'Copied!' : 'Copy'}
         </button>

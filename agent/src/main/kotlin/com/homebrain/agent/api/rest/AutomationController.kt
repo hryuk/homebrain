@@ -3,8 +3,12 @@ package com.homebrain.agent.api.rest
 import com.homebrain.agent.api.dto.AutomationCodeResponse
 import com.homebrain.agent.api.dto.AutomationRequest
 import com.homebrain.agent.api.dto.AutomationResponse
+import com.homebrain.agent.api.dto.DeployedFileDto
+import com.homebrain.agent.api.dto.MultiDeployRequest
+import com.homebrain.agent.api.dto.MultiDeployResponse
 import com.homebrain.agent.api.mapper.AutomationMapper
 import com.homebrain.agent.application.AutomationUseCase
+import com.homebrain.agent.application.FileDeployment
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
@@ -71,6 +75,42 @@ class AutomationController(
                 status = "deleted",
                 filename = "$id.star",
                 commit = commit.hash
+            )
+        )
+    }
+
+    /**
+     * Deploy multiple files (libraries and automations) in a single atomic commit.
+     * Used when the LLM proposes a library function along with an automation.
+     */
+    @PostMapping("/deploy")
+    fun deployMultiple(@RequestBody request: MultiDeployRequest): ResponseEntity<MultiDeployResponse> {
+        logger.info { "Deploying ${request.files.size} files" }
+
+        val files = request.files.map { file ->
+            FileDeployment(
+                code = file.code,
+                filename = file.filename,
+                type = when (file.type.lowercase()) {
+                    "library" -> FileDeployment.FileType.LIBRARY
+                    else -> FileDeployment.FileType.AUTOMATION
+                }
+            )
+        }
+
+        val result = automationUseCase.deployMultiple(files)
+
+        return ResponseEntity.ok(
+            MultiDeployResponse(
+                status = "deployed",
+                files = result.deployedFiles.map { deployed ->
+                    DeployedFileDto(
+                        filename = deployed.filename,
+                        type = deployed.type.name.lowercase(),
+                        isNew = deployed.isNew
+                    )
+                },
+                commit = result.commit.hash
             )
         )
     }

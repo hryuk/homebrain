@@ -36,3 +36,37 @@ data class CommitInfoDto(
     val author: String,
     val date: Instant
 )
+
+/**
+ * Request DTO for deploying multiple files (library + automation).
+ */
+data class MultiDeployRequest(
+    val files: List<FileDeployRequestDto>
+)
+
+/**
+ * DTO for a single file in a multi-deploy request.
+ */
+data class FileDeployRequestDto(
+    val code: String,
+    val filename: String,
+    val type: String  // "automation" or "library"
+)
+
+/**
+ * Response DTO for multi-file deployment.
+ */
+data class MultiDeployResponse(
+    val status: String,
+    val files: List<DeployedFileDto>,
+    val commit: String
+)
+
+/**
+ * DTO for a deployed file result.
+ */
+data class DeployedFileDto(
+    val filename: String,
+    val type: String,
+    val isNew: Boolean
+)

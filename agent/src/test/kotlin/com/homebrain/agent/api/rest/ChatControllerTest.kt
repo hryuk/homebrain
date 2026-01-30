@@ -60,7 +60,7 @@ class ChatControllerTest {
             val request = ChatRequest(message = "Create a light controller")
             val response = ChatResponse(
                 message = "Here's your automation:",
-                codeProposal = CodeProposal(
+                codeProposal = CodeProposal.singleAutomation(
                     code = "def on_message(t, p, ctx): pass",
                     filename = "light_controller.star",
                     summary = "Controls lights"
@@ -76,9 +76,10 @@ class ChatControllerTest {
             )
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.message").value("Here's your automation:"))
-                .andExpect(jsonPath("$.code_proposal.code").value("def on_message(t, p, ctx): pass"))
-                .andExpect(jsonPath("$.code_proposal.filename").value("light_controller.star"))
                 .andExpect(jsonPath("$.code_proposal.summary").value("Controls lights"))
+                .andExpect(jsonPath("$.code_proposal.files[0].code").value("def on_message(t, p, ctx): pass"))
+                .andExpect(jsonPath("$.code_proposal.files[0].filename").value("light_controller.star"))
+                .andExpect(jsonPath("$.code_proposal.files[0].type").value("automation"))
         }
 
         @Test

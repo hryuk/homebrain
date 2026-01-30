@@ -22,6 +22,40 @@ data class AutomationResult(
 )
 
 /**
+ * Represents a file to be deployed (automation or library).
+ */
+data class FileDeployment(
+    val code: String,
+    val filename: String,
+    val type: FileType
+) {
+    enum class FileType {
+        AUTOMATION,
+        LIBRARY
+    }
+
+    fun isLibrary(): Boolean = type == FileType.LIBRARY
+    fun isAutomation(): Boolean = type == FileType.AUTOMATION
+}
+
+/**
+ * Result of a deployed file.
+ */
+data class DeployedFile(
+    val filename: String,
+    val type: FileDeployment.FileType,
+    val isNew: Boolean
+)
+
+/**
+ * Result of deploying multiple files.
+ */
+data class MultiDeployResult(
+    val deployedFiles: List<DeployedFile>,
+    val commit: Commit
+)
+
+/**
  * Use case for automation CRUD operations.
  * 
  * Orchestrates automation creation, updates, deletion, and retrieval,
@@ -128,6 +162,67 @@ class AutomationUseCase(
      */
     fun getHistory(limit: Int = 50): List<Commit> {
         return gitOperations.getHistory(limit)
+    }
+
+    /**
+     * Deploys multiple files (libraries and automations) in a single atomic commit.
+     * 
+     * Files are deployed in order: libraries first, then automations.
+     * This ensures library functions are available when automations are loaded.
+     * 
+     * @param files List of files to deploy
+     * @return Result containing deployed file info and commit
+     * @throws IllegalArgumentException if files list is empty
+     */
+    fun deployMultiple(files: List<FileDeployment>): MultiDeployResult {
+        require(files.isNotEmpty()) { "At least one file is required for deployment" }
+        
+        // Sort files: libraries first, then automations
+        val sortedFiles = files.sortedBy { if (it.isLibrary()) 0 else 1 }
+        
+        val deployedFiles = sortedFiles.map { file ->
+            val isNew = !gitOperations.fileExists(file.filename)
+            val action = if (isNew) "Add" else "Update"
+            
+            logger.info { "$action ${file.type.name.lowercase()}: ${file.filename}" }
+            
+            gitOperations.writeFile(file.filename, file.code)
+            gitOperations.stageFile(file.filename)
+            
+            DeployedFile(
+                filename = file.filename,
+                type = file.type,
+                isNew = isNew
+            )
+        }
+        
+        // Create a single commit for all files
+        val commitMessage = buildCommitMessage(deployedFiles)
+        val commit = gitOperations.commit(commitMessage)
+        
+        return MultiDeployResult(
+            deployedFiles = deployedFiles,
+            commit = commit
+        )
+    }
+
+    private fun buildCommitMessage(files: List<DeployedFile>): String {
+        val libraries = files.filter { it.type == FileDeployment.FileType.LIBRARY }
+        val automations = files.filter { it.type == FileDeployment.FileType.AUTOMATION }
+        
+        return when {
+            libraries.isEmpty() -> {
+                val action = if (automations.all { it.isNew }) "Add" else "Update"
+                "$action automation: ${automations.joinToString(", ") { it.filename }}"
+            }
+            automations.isEmpty() -> {
+                val action = if (libraries.all { it.isNew }) "Add" else "Update"
+                "$action library: ${libraries.joinToString(", ") { it.filename }}"
+            }
+            else -> {
+                "Add ${libraries.joinToString(", ") { it.filename }} and ${automations.joinToString(", ") { it.filename }}"
+            }
+        }
     }
 
     private fun sanitizeFilename(filename: String): String {

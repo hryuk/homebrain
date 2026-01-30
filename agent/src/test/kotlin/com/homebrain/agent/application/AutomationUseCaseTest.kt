@@ -334,4 +334,102 @@ class AutomationUseCaseTest {
             }
         }
     }
+
+    @Nested
+    inner class DeployMultiple {
+        @Test
+        fun `should deploy single automation file`() {
+            val files = listOf(
+                FileDeployment("def on_message(t,p,c): pass", "test_automation.star", FileDeployment.FileType.AUTOMATION)
+            )
+            
+            every { gitOperations.fileExists(any()) } returns false
+            every { gitOperations.writeFile(any(), any()) } just runs
+            every { gitOperations.stageFile(any()) } just runs
+            every { gitOperations.commit(any()) } returns sampleCommit
+            
+            val result = useCase.deployMultiple(files)
+            
+            assertEquals(1, result.deployedFiles.size)
+            assertEquals("test_automation.star", result.deployedFiles[0].filename)
+            assertEquals(sampleCommit, result.commit)
+            
+            verify { gitOperations.writeFile("test_automation.star", "def on_message(t,p,c): pass") }
+            verify { gitOperations.stageFile("test_automation.star") }
+            verify { gitOperations.commit(match { it.contains("test_automation") }) }
+        }
+
+        @Test
+        fun `should deploy library and automation together`() {
+            val files = listOf(
+                FileDeployment("def blink(ctx): pass", "lib/lights.lib.star", FileDeployment.FileType.LIBRARY),
+                FileDeployment("def on_message(t,p,c): ctx.lib.lights.blink(c)", "blink_light.star", FileDeployment.FileType.AUTOMATION)
+            )
+            
+            every { gitOperations.fileExists(any()) } returns false
+            every { gitOperations.writeFile(any(), any()) } just runs
+            every { gitOperations.stageFile(any()) } just runs
+            every { gitOperations.commit(any()) } returns sampleCommit
+            
+            val result = useCase.deployMultiple(files)
+            
+            assertEquals(2, result.deployedFiles.size)
+            assertEquals("lib/lights.lib.star", result.deployedFiles[0].filename)
+            assertEquals("blink_light.star", result.deployedFiles[1].filename)
+            
+            // Verify library is written first
+            verifyOrder {
+                gitOperations.writeFile("lib/lights.lib.star", "def blink(ctx): pass")
+                gitOperations.stageFile("lib/lights.lib.star")
+                gitOperations.writeFile("blink_light.star", match { it.contains("ctx.lib.lights.blink") })
+                gitOperations.stageFile("blink_light.star")
+            }
+            
+            // Verify single commit for all files
+            verify(exactly = 1) { gitOperations.commit(any()) }
+        }
+
+        @Test
+        fun `should include library in commit message`() {
+            val files = listOf(
+                FileDeployment("def helper(): pass", "lib/utils.lib.star", FileDeployment.FileType.LIBRARY),
+                FileDeployment("def on_message(t,p,c): pass", "my_automation.star", FileDeployment.FileType.AUTOMATION)
+            )
+            
+            val commitMessageSlot = slot<String>()
+            
+            every { gitOperations.fileExists(any()) } returns false
+            every { gitOperations.writeFile(any(), any()) } just runs
+            every { gitOperations.stageFile(any()) } just runs
+            every { gitOperations.commit(capture(commitMessageSlot)) } returns sampleCommit
+            
+            useCase.deployMultiple(files)
+            
+            assertTrue(commitMessageSlot.captured.contains("lib/utils.lib.star"))
+            assertTrue(commitMessageSlot.captured.contains("my_automation.star"))
+        }
+
+        @Test
+        fun `should handle empty files list`() {
+            assertThrows<IllegalArgumentException> {
+                useCase.deployMultiple(emptyList())
+            }
+        }
+
+        @Test
+        fun `should update existing files`() {
+            val files = listOf(
+                FileDeployment("def updated(): pass", "existing.star", FileDeployment.FileType.AUTOMATION)
+            )
+            
+            every { gitOperations.fileExists("existing.star") } returns true
+            every { gitOperations.writeFile(any(), any()) } just runs
+            every { gitOperations.stageFile(any()) } just runs
+            every { gitOperations.commit(any()) } returns sampleCommit
+            
+            val result = useCase.deployMultiple(files)
+            
+            assertFalse(result.deployedFiles[0].isNew)
+        }
+    }
 }

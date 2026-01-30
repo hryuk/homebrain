@@ -44,17 +44,19 @@ class ChatMapperTest {
 
             assertEquals("Here's your automation:", result.message)
             assertNotNull(result.codeProposal)
-            assertEquals("def on_message(t, p, ctx): pass", result.codeProposal?.code)
-            assertEquals("light_controller", result.codeProposal?.filename)
             assertEquals("Controls lights based on motion", result.codeProposal?.summary)
+            assertEquals(1, result.codeProposal?.files?.size)
+            assertEquals("def on_message(t, p, ctx): pass", result.codeProposal?.files?.get(0)?.code)
+            assertEquals("light_controller", result.codeProposal?.files?.get(0)?.filename)
+            assertEquals("automation", result.codeProposal?.files?.get(0)?.type)
         }
     }
 
     @Nested
     inner class ToDtoCodeProposal {
         @Test
-        fun `should map code proposal`() {
-            val proposal = CodeProposal(
+        fun `should map single file code proposal`() {
+            val proposal = CodeProposal.singleAutomation(
                 code = """
                     def on_message(topic, payload, ctx):
                         ctx.log("Received message")
@@ -67,9 +69,35 @@ class ChatMapperTest {
 
             val result = mapper.toDto(proposal)
 
-            assertTrue(result.code.contains("def on_message"))
-            assertEquals("test_automation.star", result.filename)
             assertEquals("Logs all messages from test topics", result.summary)
+            assertEquals(1, result.files.size)
+            assertTrue(result.files[0].code.contains("def on_message"))
+            assertEquals("test_automation.star", result.files[0].filename)
+            assertEquals("automation", result.files[0].type)
+        }
+
+        @Test
+        fun `should map multi-file code proposal`() {
+            val proposal = CodeProposal.withLibrary(
+                libraryCode = "def helper(ctx): pass",
+                libraryFilename = "lib/helpers.lib.star",
+                automationCode = "def on_message(t, p, ctx): ctx.lib.helpers.helper(ctx)",
+                automationFilename = "use_helpers.star",
+                summary = "Automation with library function"
+            )
+
+            val result = mapper.toDto(proposal)
+
+            assertEquals("Automation with library function", result.summary)
+            assertEquals(2, result.files.size)
+            
+            // Library should be first
+            assertEquals("lib/helpers.lib.star", result.files[0].filename)
+            assertEquals("library", result.files[0].type)
+            
+            // Automation should be second
+            assertEquals("use_helpers.star", result.files[1].filename)
+            assertEquals("automation", result.files[1].type)
         }
     }
 

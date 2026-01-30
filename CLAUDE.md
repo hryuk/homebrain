@@ -105,7 +105,7 @@ After any code change, update relevant documentation:
       - `LibraryModule.kt` - Module entity
       - `GlobalStateSchema.kt` - State ownership tracking
     - `conversation/` - Chat domain
-      - `ChatResponse.kt`, `CodeProposal.kt`, `Message.kt`
+      - `ChatResponse.kt`, `CodeProposal.kt`, `FileProposal.kt`, `Message.kt`
     - `commit/` - Git commit value object
   - `application/` - Use cases (orchestration layer)
     - `AutomationUseCase.kt` - CRUD operations for automations
@@ -173,7 +173,8 @@ cd web && npm run dev
 |--------|----------|-------------|
 | POST | `/api/chat` | Conversational AI chat with tool support |
 | GET | `/api/automations` | List all automations |
-| POST | `/api/automations` | Deploy new automation |
+| POST | `/api/automations` | Deploy new automation (single file) |
+| POST | `/api/automations/deploy` | Deploy multiple files (library + automation) |
 | GET | `/api/automations/{id}` | Get automation code |
 | PUT | `/api/automations/{id}` | Update automation |
 | DELETE | `/api/automations/{id}` | Delete automation |
@@ -337,6 +338,28 @@ class MyTools(private val service: SomeService) {
 - `getLibraryModules()` - List available library modules with functions
 - `getLibraryCode(moduleName)` - Get source code for a library module
 - `getGlobalStateSchema()` - See which automations write which global state keys
+
+### Library-First Code Generation
+
+The LLM is configured to favor creating reusable library functions. When users request automations involving:
+- **Generic device operations** (blink, fade, pulse, toggle sequences)
+- **State management patterns** (history tracking, aggregation, state machines)
+- **Multi-device coordination** (scenes, sequences, group operations)
+
+The LLM will propose both a library function and the automation that uses it, deployed together atomically.
+
+**Code Proposal Format:**
+```json
+{
+  "summary": "Blink kitchen light with new library function",
+  "files": [
+    {"code": "...", "filename": "lib/lights.lib.star", "type": "library"},
+    {"code": "...", "filename": "blink_kitchen.star", "type": "automation"}
+  ]
+}
+```
+
+The system prompt in `EmbabelChatAgent.kt` contains explicit criteria for when to extract logic into libraries vs inline it.
 
 ## Test-Driven Development (TDD)
 
@@ -554,7 +577,9 @@ agent/src/test/kotlin/com/homebrain/agent/
 │   │   ├── TopicPathTest.kt         (Heavy Property-based)
 │   │   └── TopicTest.kt             (Unit)
 │   ├── conversation/
-│   │   └── MessageTest.kt           (Unit + Property-based)
+│   │   ├── MessageTest.kt           (Unit + Property-based)
+│   │   ├── FileProposalTest.kt      (Unit + Property-based)
+│   │   └── CodeProposalTest.kt      (Unit + Property-based)
 │   └── commit/
 │       └── CommitTest.kt            (Unit)
 ├── application/

@@ -3,7 +3,9 @@ package com.homebrain.agent.api.mapper
 import com.homebrain.agent.api.dto.ChatResponse
 import com.homebrain.agent.api.dto.CodeProposalDto
 import com.homebrain.agent.api.dto.ConversationMessageDto
+import com.homebrain.agent.api.dto.FileProposalDto
 import com.homebrain.agent.domain.conversation.CodeProposal
+import com.homebrain.agent.domain.conversation.FileProposal
 import com.homebrain.agent.domain.conversation.Message
 import com.homebrain.agent.domain.conversation.ChatResponse as DomainChatResponse
 import org.springframework.stereotype.Component
@@ -23,9 +25,16 @@ class ChatMapper {
 
     fun toDto(proposal: CodeProposal): CodeProposalDto {
         return CodeProposalDto(
-            code = proposal.code,
-            filename = proposal.filename,
-            summary = proposal.summary
+            summary = proposal.summary,
+            files = proposal.files.map { toDto(it) }
+        )
+    }
+
+    fun toDto(file: FileProposal): FileProposalDto {
+        return FileProposalDto(
+            code = file.code,
+            filename = file.filename,
+            type = file.type.toApiString()
         )
     }
 

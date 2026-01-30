@@ -33,10 +33,20 @@ data class ChatResponse(
 )
 
 /**
- * DTO for a proposed automation code.
+ * DTO for a proposed code change containing one or more files.
+ * When the LLM creates reusable library functions, it proposes both
+ * the library and automation files together.
  */
 data class CodeProposalDto(
+    val summary: String,
+    val files: List<FileProposalDto>
+)
+
+/**
+ * DTO for a single file in a code proposal.
+ */
+data class FileProposalDto(
     val code: String,
     val filename: String,
-    val summary: String
+    val type: String  // "automation" or "library"
 )

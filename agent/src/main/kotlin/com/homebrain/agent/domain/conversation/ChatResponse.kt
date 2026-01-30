@@ -26,9 +26,15 @@ data class ChatResponse(
         fun text(message: String) = ChatResponse(message)
 
         /**
-         * Creates a response with a code proposal.
+         * Creates a response with a single automation code proposal.
          */
         fun withCode(message: String, code: String, filename: String, summary: String) =
-            ChatResponse(message, CodeProposal(code, filename, summary))
+            ChatResponse(message, CodeProposal.singleAutomation(code, filename, summary))
+
+        /**
+         * Creates a response with a code proposal containing multiple files.
+         */
+        fun withProposal(message: String, proposal: CodeProposal) =
+            ChatResponse(message, proposal)
     }
 }
