@@ -124,6 +124,7 @@ After any code change, update relevant documentation:
     - `ai/` - LLM integration
       - `EmbabelChatAgent.kt` - Embabel agent wrapper
       - `MqttLlmTools.kt` - LLM-callable tools
+      - `PromptLoader.kt` - Loads prompts from Markdown files
     - `websocket/` - Real-time communication
       - `LogsWebSocketHandler.kt` - Log streaming
   - `api/` - Inbound adapters (HTTP layer)
@@ -359,7 +360,34 @@ The LLM will propose both a library function and the automation that uses it, de
 }
 ```
 
-The system prompt in `EmbabelChatAgent.kt` contains explicit criteria for when to extract logic into libraries vs inline it.
+The system prompt is stored in `resources/prompts/chat-system-prompt.md` and contains explicit criteria for when to extract logic into libraries vs inline it.
+
+### Prompt Management
+
+Prompts are stored as Markdown files in `agent/src/main/resources/prompts/` for easier editing and version control:
+
+| File | Purpose |
+|------|---------|
+| `chat-system-prompt.md` | Main system prompt for the chat agent |
+
+**PromptLoader** (`infrastructure/ai/PromptLoader.kt`) provides:
+- Loading prompts from classpath resources
+- Caching for performance (lazy loading)
+- Simple variable substitution with `{{variableName}}` syntax
+
+```kotlin
+// Load a prompt
+val prompt = promptLoader.load("chat-system-prompt.md")
+
+// Load with variable substitution
+val prompt = promptLoader.load("my-prompt.md", mapOf("name" to "value"))
+```
+
+**Benefits:**
+- Prompts are content, not code - easier to edit and review
+- Markdown syntax highlighting in IDEs
+- Cleaner diffs in version control
+- No string escaping issues
 
 ## Test-Driven Development (TDD)
 
@@ -594,8 +622,10 @@ agent/src/test/kotlin/com/homebrain/agent/
 │       ├── ChatControllerTest.kt        (Integration)
 │       └── TopicsControllerTest.kt      (Integration)
 └── infrastructure/
-    └── engine/
-        └── EngineClientTest.kt      (Integration with WireMock)
+    ├── engine/
+    │   └── EngineClientTest.kt      (Integration with WireMock)
+    └── ai/
+        └── PromptLoaderTest.kt      (Unit)
 ```
 
 **See [docs/testing.md](docs/testing.md) for detailed test examples, best practices, and troubleshooting.**
@@ -613,7 +643,7 @@ agent/src/test/kotlin/com/homebrain/agent/
 1. **Write test first** in `/engine/internal/runner/context_test.go`
 2. Add method to `/engine/internal/runner/context.go`
 3. Register in `ToStarlark()` method
-4. Update system prompt in `/agent/.../infrastructure/ai/EmbabelChatAgent.kt`
+4. Update system prompt in `/agent/src/main/resources/prompts/chat-system-prompt.md`
 5. **Update documentation** in `/docs/automations.md`
 6. **Update CLAUDE.md** if needed (add to ctx functions list)
 7. Verify test passes
@@ -706,7 +736,12 @@ homebrain/
 ├── agent/                  # AI Agent service (Kotlin/Embabel/DDD)
 │   ├── Dockerfile
 │   ├── build.gradle.kts
-│   └── src/main/kotlin/com/homebrain/agent/
+│   └── src/main/
+│       ├── resources/
+│       │   ├── application.yml
+│       │   └── prompts/            # LLM prompts as Markdown
+│       │       └── chat-system-prompt.md
+│       └── kotlin/com/homebrain/agent/
 │       ├── AgentApplication.kt
 │       ├── domain/           # Pure domain (no dependencies)
 │       │   ├── automation/   # Automation aggregate
