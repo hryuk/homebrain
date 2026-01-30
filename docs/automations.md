@@ -11,6 +11,7 @@ Reusable function libraries stored in `automations/lib/*.lib.star` that can be s
 - `timers` - Debouncing, cooldowns, time ranges
 - `utils` - String manipulation, data validation, helpers
 - `presence` - Occupancy tracking, motion detection
+- `devices` - Device state synchronization with global state
 
 ### Global State
 Shared state accessible across all automations with "read-all, write-own" access control:
@@ -234,6 +235,30 @@ now = ctx.now()
 | `time_since_last_motion(ctx, location)` | Get seconds since last motion |
 | `aggregate_presence_score(ctx, sensors, timeout=300)` | Calculate presence confidence (0.0-1.0) |
 
+### devices.lib.star
+
+Enables automations to read the state of devices they're NOT directly subscribed to.
+
+| Function | Description |
+|----------|-------------|
+| `extract_device_name(topic, position)` | Extract device name from MQTT topic at given position |
+| `sync_state(ctx, device_name, payload)` | Sync device state to global state (flat keys) |
+| `get_property(ctx, device_name, property, default)` | Get a device property from global state |
+| `is_on(ctx, device_name)` | Check if device state is "ON" |
+| `is_off(ctx, device_name)` | Check if device state is "OFF" |
+| `get_last_updated(ctx, device_name)` | Get last sync timestamp |
+
+**Global State Structure:**
+
+State is stored as flat keys with recursive flattening:
+```
+devices.<device_name>.state = "ON"
+devices.<device_name>.brightness = 100
+devices.<device_name>.color.x = 0.5
+devices.<device_name>.color.y = 0.3
+devices.<device_name>.last_updated = 1706745600
+```
+
 ## Trigger Model
 
 ### Event-Driven (Primary)
@@ -288,6 +313,58 @@ Examples:
 - `0 8 * * 1` - Mondays at 8am
 
 ## Complete Examples
+
+### Device State Sync Pattern
+
+Use this pattern when an automation needs to check the state of OTHER devices (not the trigger).
+
+**Scenario:** Turn on bedroom light when living room motion is detected, but only if living room light is already on.
+
+**Step 1: Sync the device whose state you need to check**
+
+```python
+def on_message(topic, payload, ctx):
+    device_name = ctx.lib.devices.extract_device_name(topic, 1)
+    ctx.lib.devices.sync_state(ctx, device_name, ctx.json_decode(payload))
+
+config = {
+    "name": "Sync Living Room Light",
+    "description": "Sync living room light state to global state for other automations",
+    "subscribe": ["zigbee2mqtt/living_room_light"],
+    "global_state_writes": ["devices.*"],
+    "enabled": True,
+}
+```
+
+**Step 2: React to trigger and check other device state**
+
+```python
+def on_message(topic, payload, ctx):
+    data = ctx.json_decode(payload)
+    
+    # React to motion (this is the trigger)
+    if data.get("occupancy") == True:
+        # Check OTHER device via global state
+        if ctx.lib.devices.is_on(ctx, "living_room_light"):
+            ctx.publish("zigbee2mqtt/bedroom_light/set", ctx.json_encode({"state": "ON"}))
+            ctx.log("Bedroom light on (living room light was on)")
+
+config = {
+    "name": "Bedroom Light on Living Room Motion",
+    "description": "Turn on bedroom light when motion detected if living room light is on",
+    "subscribe": ["zigbee2mqtt/living_room_motion"],
+    "enabled": True,
+}
+```
+
+**When to use this pattern:**
+- Automation reacts to device A but needs to check device B's state
+- You need to know if another device is on/off before taking action
+- Cross-device coordination without subscribing to multiple topics
+
+**When NOT to use this pattern:**
+- Simply reacting to a device (just subscribe and react)
+- The device state is already in the message you're receiving
 
 ### Motion-Activated Light (Framework Style)
 

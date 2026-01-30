@@ -285,6 +285,14 @@ def my_helper_function(ctx, param1, param2):
 - Example: `ctx.lib.utils.safe_get(data, "key", default)`
 - Example: `ctx.lib.presence.update_room_occupancy(ctx, "bedroom", True)`
 
+**Device State Library (`ctx.lib.devices.*`):**
+- `ctx.lib.devices.extract_device_name(topic, position)` - Extract device name from MQTT topic
+- `ctx.lib.devices.sync_state(ctx, device_name, payload)` - Sync device state to global state
+- `ctx.lib.devices.get_property(ctx, device_name, property, default)` - Get device property from global state
+- `ctx.lib.devices.is_on(ctx, device_name)` - Check if device state is "ON"
+- `ctx.lib.devices.is_off(ctx, device_name)` - Check if device state is "OFF"
+- `ctx.lib.devices.get_last_updated(ctx, device_name)` - Get last sync timestamp
+
 **Utilities:**
 - `ctx.now()` - Current Unix timestamp
 
@@ -366,6 +374,45 @@ The LLM will propose both a library function and the automation that uses it, de
 ```
 
 The system prompt is stored in `resources/prompts/chat-system-prompt.md` and contains explicit criteria for when to extract logic into libraries vs inline it.
+
+### Device State Synchronization
+
+The LLM will create "state sync" automations when a user's request requires checking the state of devices that are NOT the trigger. This uses the `devices.lib.star` library.
+
+**When to use:**
+- Automation reacts to device A, but needs to check device B's state
+- Example: "Turn on hallway light when motion detected, but only if living room light is on"
+
+**Pattern:**
+1. **State sync automation** - Subscribes to the device whose state needs to be checked, syncs to global state
+2. **Reactive automation** - Subscribes to the trigger, reads other device state from global state
+
+**Example sync automation:**
+```python
+def on_message(topic, payload, ctx):
+    device_name = ctx.lib.devices.extract_device_name(topic, 1)
+    ctx.lib.devices.sync_state(ctx, device_name, ctx.json_decode(payload))
+
+config = {
+    "name": "Sync Living Room Light",
+    "subscribe": ["zigbee2mqtt/living_room_light"],
+    "global_state_writes": ["devices.*"],
+    "enabled": True,
+}
+```
+
+**Example consumer automation:**
+```python
+def on_message(topic, payload, ctx):
+    if ctx.lib.devices.is_on(ctx, "living_room_light"):
+        ctx.publish("zigbee2mqtt/hallway_light/set", ctx.json_encode({"state": "ON"}))
+
+config = {
+    "name": "Hallway Light on Motion",
+    "subscribe": ["zigbee2mqtt/hallway_motion"],
+    "enabled": True,
+}
+```
 
 ### Code Validation and Fixing
 

@@ -131,6 +131,73 @@ WRONG (over-engineering):
 - ctx.get_state(key), ctx.set_state(key, value), ctx.clear_state(key)
 - Isolated to the automation, not shared
 
+## Device State Synchronization
+
+Use global state to check OTHER devices' state when an automation needs to:
+- React to device A, but check device B's current state
+- Make decisions based on multiple devices' states
+- Check if a device is on/off without subscribing to it
+
+**Key Principle:** 
+- If just reacting to a device -> Subscribe directly, no global state needed
+- If need to CHECK another device's state -> Use global state with sync automation
+
+**When to create a state sync automation:**
+Create a sync automation ONLY when the user's automation needs to read the state of devices it's NOT subscribing to.
+
+**Example: "Turn on hallway light when motion detected, but only if living room light is on"**
+
+This needs TWO automations:
+1. **State sync** for living_room_light (so we can check its state)
+2. **Reactive automation** that subscribes to motion, checks living room state via global state
+
+**State Sync Automation Pattern:**
+```python
+def on_message(topic, payload, ctx):
+    device_name = ctx.lib.devices.extract_device_name(topic, 1)
+    data = ctx.json_decode(payload)
+    ctx.lib.devices.sync_state(ctx, device_name, data)
+
+config = {
+    "name": "Sync Living Room Light",
+    "description": "Sync living room light state to global state",
+    "subscribe": ["zigbee2mqtt/living_room_light"],
+    "global_state_writes": ["devices.*"],
+    "enabled": True,
+}
+```
+
+**Consumer Automation Pattern:**
+```python
+def on_message(topic, payload, ctx):
+    data = ctx.json_decode(payload)
+    
+    # This is the trigger - motion detected
+    if data.get("occupancy") == True:
+        # Check OTHER device via global state (not subscribing to it)
+        if ctx.lib.devices.is_on(ctx, "living_room_light"):
+            ctx.publish("zigbee2mqtt/hallway_light/set", ctx.json_encode({"state": "ON"}))
+
+config = {
+    "name": "Hallway Light on Motion",
+    "description": "Turn on hallway light when motion detected if living room is on",
+    "subscribe": ["zigbee2mqtt/hallway_motion"],
+    "enabled": True,
+}
+```
+
+**Devices Library Functions:**
+- `ctx.lib.devices.extract_device_name(topic, position)` - Extract device name from topic
+- `ctx.lib.devices.sync_state(ctx, device_name, payload)` - Sync device state (use in sync automation)
+- `ctx.lib.devices.get_property(ctx, device_name, property, default)` - Get device property
+- `ctx.lib.devices.is_on(ctx, device_name)` - Check if device state is "ON"
+- `ctx.lib.devices.is_off(ctx, device_name)` - Check if device state is "OFF"
+- `ctx.lib.devices.get_last_updated(ctx, device_name)` - Get last sync timestamp
+
+**DO NOT use global state / sync automations when:**
+- Simply reacting to a single device (just subscribe to it)
+- The device state is in the message you're already receiving
+
 ## Starlark Code Format
 
 **Regular Automation:**
@@ -244,3 +311,4 @@ def fade(ctx, topic, start_brightness, end_brightness, steps, step_delay_ms):
 9. Use descriptive filenames (lowercase, underscores, no spaces)
 10. When creating libraries, add them to existing modules if the function fits, otherwise create new modules
 11. Library filenames MUST be in lib/ folder and end with .lib.star (e.g., "lib/lights.lib.star")
+12. When automation needs to CHECK another device's state (not the trigger), create a state sync automation for that device using ctx.lib.devices.sync_state()
