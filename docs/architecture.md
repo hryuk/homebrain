@@ -2,7 +2,7 @@
 
 ## Overview
 
-Homebrain is a Docker-based, code-first solution for orchestrating MQTT automations using AI-generated code.
+Homebrain is a Docker-based, composable automation framework for MQTT systems. It uses AI to generate Starlark code with access to reusable library modules and shared global state, enabling automations to coordinate and share functionality.
 
 ## System Architecture
 
@@ -30,6 +30,55 @@ Homebrain is a Docker-based, code-first solution for orchestrating MQTT automati
                               │     Broker      │
                               └─────────────────┘
 ```
+
+## Framework Features
+
+### Library Modules
+
+**Purpose:** Reusable function libraries shared across all automations
+
+**Location:** `automations/lib/*.lib.star`
+
+**Access:** `ctx.lib.modulename.function()`
+
+**Characteristics:**
+- Pure functions only (no config, no callbacks)
+- Loaded on engine startup
+- Hot-reload when library files change
+- Automatically available to all automations
+
+**Built-in Libraries:**
+- `timers` - Debouncing, cooldowns, time utilities
+- `utils` - Data validation, string manipulation, helpers
+- `presence` - Occupancy tracking, motion detection
+
+### Global State
+
+**Purpose:** Shared state accessible across all automations
+
+**Access Control:** "Read-all, write-own"
+- Any automation can **read** any global state key via `ctx.get_global(key)`
+- Automations must declare writable keys in `config.global_state_writes`
+- Writes to undeclared keys fail silently with error log
+
+**Storage:** BoltDB "global" bucket (separate from per-automation state)
+
+**Use Cases:**
+- Presence/occupancy coordination
+- Shared debounce timers
+- Cross-automation state synchronization
+
+### Agent Intelligence
+
+**LLM Tools for Framework Awareness:**
+- `getLibraryModules()` - Lists available library modules and their functions
+- `getLibraryCode(moduleName)` - Returns full source code of library module
+- `getGlobalStateSchema()` - Shows which automations write which global keys
+
+**Behavior:**
+- Agent checks existing libraries before generating code
+- Proactively suggests using library functions
+- Can propose creating new library modules for reusable logic
 
 ## Components
 
@@ -91,6 +140,9 @@ Homebrain is a Docker-based, code-first solution for orchestrating MQTT automati
 │  │   ├── Topic.kt               - Entity                    │
 │  │   ├── TopicPath.kt           - Value object              │
 │  │   └── TopicRepository.kt     - Port (interface)          │
+│  ├── library/                                                 │
+│  │   ├── LibraryModule.kt       - Module entity             │
+│  │   └── GlobalStateSchema.kt   - State ownership tracking  │
 │  ├── conversation/                                            │
 │  │   ├── ChatResponse.kt        - Response model            │
 │  │   ├── CodeProposal.kt        - Value object              │
@@ -143,9 +195,11 @@ Homebrain is a Docker-based, code-first solution for orchestrating MQTT automati
 **Features:**
 - MQTT client with auto-reconnect
 - Starlark interpreter for sandboxed execution
-- File watcher for hot-reload
-- Persistent state storage (BoltDB)
+- Library module loader (`.lib.star` files)
+- File watcher for hot-reload (includes lib/ directory)
+- Persistent state storage (BoltDB - per-automation + global)
 - Cron-based scheduling
+- Global state with access control
 
 **Port:** 9000
 
@@ -154,6 +208,10 @@ Homebrain is a Docker-based, code-first solution for orchestrating MQTT automati
 - `GET /automations` - List running automations
 - `GET /topics` - List discovered MQTT topics
 - `GET /logs` - Get recent logs
+- `GET /library` - List library modules with functions
+- `GET /library/{name}` - Get library module source code
+- `GET /global-state` - Get current global state values
+- `GET /global-state-schema` - Get global state ownership schema
 
 ## Data Flow
 

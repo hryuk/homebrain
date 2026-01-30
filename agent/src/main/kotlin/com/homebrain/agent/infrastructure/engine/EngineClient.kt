@@ -1,5 +1,7 @@
 package com.homebrain.agent.infrastructure.engine
 
+import com.homebrain.agent.domain.library.LibraryModule
+import com.homebrain.agent.domain.library.GlobalStateSchema
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -72,6 +74,84 @@ class EngineClient(
         } catch (e: Exception) {
             logger.warn(e) { "Failed to fetch logs from engine" }
             emptyList()
+        }
+    }
+
+    /**
+     * Gets all library modules from the engine.
+     */
+    fun getLibraryModules(): List<LibraryModule> {
+        logger.debug { "Fetching library modules from engine" }
+        return try {
+            val response = webClient.get()
+                .uri("/library")
+                .retrieve()
+                .bodyToMono<List<Map<String, Any>>>()
+                .block() ?: emptyList()
+
+            response.map { module ->
+                LibraryModule.create(
+                    name = module["name"] as? String ?: "",
+                    description = module["description"] as? String ?: "",
+                    functions = (module["functions"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+                )
+            }
+        } catch (e: Exception) {
+            logger.warn(e) { "Failed to fetch library modules from engine" }
+            emptyList()
+        }
+    }
+
+    /**
+     * Gets the source code for a specific library module.
+     */
+    fun getLibraryCode(moduleName: String): String {
+        logger.debug { "Fetching library code for module: $moduleName" }
+        return try {
+            webClient.get()
+                .uri("/library/$moduleName")
+                .retrieve()
+                .bodyToMono<String>()
+                .block() ?: ""
+        } catch (e: Exception) {
+            logger.warn(e) { "Failed to fetch library code for module: $moduleName" }
+            ""
+        }
+    }
+
+    /**
+     * Gets the global state schema showing which automations can write which keys.
+     */
+    fun getGlobalStateSchema(): GlobalStateSchema {
+        logger.debug { "Fetching global state schema from engine" }
+        return try {
+            val response = webClient.get()
+                .uri("/global-state-schema")
+                .retrieve()
+                .bodyToMono<Map<String, List<String>>>()
+                .block() ?: emptyMap()
+
+            GlobalStateSchema.fromMap(response)
+        } catch (e: Exception) {
+            logger.warn(e) { "Failed to fetch global state schema from engine" }
+            GlobalStateSchema.empty()
+        }
+    }
+
+    /**
+     * Gets the current global state values.
+     */
+    fun getGlobalState(): Map<String, Any> {
+        logger.debug { "Fetching global state from engine" }
+        return try {
+            webClient.get()
+                .uri("/global-state")
+                .retrieve()
+                .bodyToMono<Map<String, Any>>()
+                .block() ?: emptyMap()
+        } catch (e: Exception) {
+            logger.warn(e) { "Failed to fetch global state from engine" }
+            emptyMap()
         }
     }
 }

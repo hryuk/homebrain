@@ -34,7 +34,7 @@ After any code change, update relevant documentation:
 
 ## Project Overview
 
-**Homebrain** is an AI-powered MQTT automation orchestrator. Users describe automations in natural language, an LLM generates Starlark code, and the system deploys it automatically with hot-reload.
+**Homebrain** is an AI-powered MQTT automation framework. Users describe automations in natural language, an LLM generates Starlark code with access to reusable library functions and shared global state. The system is a composable framework where automations can leverage shared functionality and coordinate through global state.
 
 ## Documentation
 
@@ -57,10 +57,16 @@ After any code change, update relevant documentation:
                             │                        │
                      ┌──────▼────────────────────────▼──────┐
                      │  automations/*.star (Git volume)     │
+                     │  automations/lib/*.lib.star          │
                      └──────────────────────────────────────┘
 ```
 
 **Data flow:** User → Web UI → Agent (LLM with tools generates code) → writes .star file → Engine detects change → hot-reloads → subscribes to MQTT topics
+
+**Framework features:**
+- **Library modules**: Reusable functions in `lib/*.lib.star` accessible via `ctx.lib.module.function()`
+- **Global state**: Shared state across automations with "read-all, write-own" access control
+- **Agent intelligence**: LLM sees existing libraries and suggests reuse
 
 ## Tech Stack
 
@@ -78,9 +84,10 @@ After any code change, update relevant documentation:
 - `main.go` - Entry point, HTTP API for internal use
 - `internal/mqtt/client.go` - MQTT client with auto-reconnect
 - `internal/runner/starlark.go` - Loads and manages automations
+- `internal/runner/library.go` - Library module loader and manager
 - `internal/runner/context.go` - `ctx.*` functions exposed to Starlark scripts
-- `internal/watcher/watcher.go` - File watcher for hot-reload
-- `internal/state/state.go` - BoltDB persistence for automation state
+- `internal/watcher/watcher.go` - File watcher for hot-reload (includes lib/ watching)
+- `internal/state/state.go` - BoltDB persistence for per-automation and global state
 
 ### Agent (`/agent`) - Kotlin/Spring Boot/Embabel (DDD Architecture)
 - `build.gradle.kts` - Gradle build with Embabel dependencies
@@ -94,6 +101,9 @@ After any code change, update relevant documentation:
     - `topic/` - Topic entity
       - `Topic.kt` - Entity, `TopicPath.kt` - Value object
       - `TopicRepository.kt` - Repository port (interface)
+    - `library/` - Library module domain
+      - `LibraryModule.kt` - Module entity
+      - `GlobalStateSchema.kt` - State ownership tracking
     - `conversation/` - Chat domain
       - `ChatResponse.kt`, `CodeProposal.kt`, `Message.kt`
     - `commit/` - Git commit value object
@@ -175,15 +185,25 @@ cd web && npm run dev
 | GET | `/automations` | List running automations |
 | GET | `/topics` | Discovered MQTT topics |
 | GET | `/logs` | Recent automation logs |
+| GET | `/library` | List library modules with functions |
+| GET | `/library/{name}` | Get module source code |
+| GET | `/global-state` | Get global state schema (keys and which automations own them) |
+| GET | `/global-state-schema` | Get current global state values |
 
 ## Starlark Automation Format
+
+### Regular Automation
 
 ```python
 def on_message(topic, payload, ctx):
     """Called when subscribed MQTT topics receive messages."""
     data = ctx.json_decode(payload)
-    # Handle message...
-    ctx.publish("output/topic", ctx.json_encode({"key": "value"}))
+    
+    # Use library functions
+    if ctx.lib.timers.debounce_check(ctx, "motion_hallway", 300):
+        ctx.publish("zigbee2mqtt/light/set", ctx.json_encode({"state": "ON"}))
+        # Update global state
+        ctx.set_global("presence.hallway.last_motion", ctx.now())
 
 def on_schedule(ctx):
     """Optional: Called on cron schedule."""
@@ -192,17 +212,65 @@ def on_schedule(ctx):
 config = {
     "name": "Automation Name",
     "description": "What it does",
-    "subscribe": ["mqtt/topic/+"],  # MQTT topics to subscribe
-    "schedule": "* * * * *",        # Optional cron expression
+    "subscribe": ["mqtt/topic/+"],         # MQTT topics to subscribe
+    "schedule": "* * * * *",               # Optional cron expression
+    "global_state_writes": ["presence.*"], # Keys this automation can write (NEW)
     "enabled": True,
 }
 ```
 
+### Library Module Format
+
+Library modules (`.lib.star` files in `automations/lib/`) contain pure functions:
+
+```python
+"""Module description for documentation."""
+
+def my_helper_function(ctx, param1, param2):
+    """Function docstring.
+    
+    Args:
+        ctx: Automation context
+        param1: Description
+        param2: Description
+        
+    Returns:
+        Description
+        
+    Example:
+        result = ctx.lib.mymodule.my_helper_function(ctx, "a", "b")
+    """
+    # Implementation
+    return result
+```
+
 ### Available `ctx` Functions
+
+**MQTT & Logging:**
 - `ctx.publish(topic, payload)` - Publish MQTT message
 - `ctx.log(message)` - Log message (visible in UI)
-- `ctx.json_encode(value)` / `ctx.json_decode(string)` - JSON handling
-- `ctx.get_state(key)` / `ctx.set_state(key, value)` / `ctx.clear_state(key)` - Persistent state
+
+**JSON Handling:**
+- `ctx.json_encode(value)` - Convert dict/list to JSON string
+- `ctx.json_decode(string)` - Parse JSON string to dict/list
+
+**Per-Automation State:**
+- `ctx.get_state(key)` - Get automation's persistent state
+- `ctx.set_state(key, value)` - Set automation's persistent state
+- `ctx.clear_state(key)` - Clear automation's persistent state
+
+**Global State (NEW):**
+- `ctx.get_global(key)` - Read any global state (no restrictions)
+- `ctx.set_global(key, value)` - Write to declared keys only
+- `ctx.clear_global(key)` - Clear declared keys
+
+**Library Functions (NEW):**
+- `ctx.lib.modulename.function(...)` - Call library functions
+- Example: `ctx.lib.timers.debounce_check(ctx, "key", 300)`
+- Example: `ctx.lib.utils.safe_get(data, "key", default)`
+- Example: `ctx.lib.presence.update_room_occupancy(ctx, "bedroom", True)`
+
+**Utilities:**
 - `ctx.now()` - Current Unix timestamp
 
 ## Environment Variables
@@ -253,6 +321,14 @@ class MyTools(private val service: SomeService) {
     ): Thing = service.findById(id)
 }
 ```
+
+**Current LLM Tools** (in `MqttLlmTools.kt`):
+- `getAllTopics()` - Get all MQTT topics
+- `searchTopics(pattern)` - Search topics by keyword
+- `getAutomations()` - List existing automations
+- `getLibraryModules()` - List available library modules with functions
+- `getLibraryCode(moduleName)` - Get source code for a library module
+- `getGlobalStateSchema()` - See which automations write which global state keys
 
 ## Test-Driven Development (TDD)
 
@@ -602,6 +678,7 @@ homebrain/
 │       ├── domain/           # Pure domain (no dependencies)
 │       │   ├── automation/   # Automation aggregate
 │       │   ├── topic/        # Topic entity
+│       │   ├── library/      # Library module domain
 │       │   ├── conversation/ # Chat domain
 │       │   └── commit/       # Commit value object
 │       ├── application/      # Use cases
@@ -624,5 +701,7 @@ homebrain/
 │       ├── App.tsx
 │       └── components/
 └── automations/            # Generated automation scripts
-    └── *.star
+    ├── *.star              # Regular automations
+    └── lib/                # Library modules
+        └── *.lib.star      # Reusable functions
 ```

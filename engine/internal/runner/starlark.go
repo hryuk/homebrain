@@ -18,11 +18,12 @@ import (
 
 // AutomationConfig represents the config dict from a Starlark automation
 type AutomationConfig struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Subscribe   []string `json:"subscribe"`
-	Schedule    string   `json:"schedule,omitempty"`
-	Enabled     bool     `json:"enabled"`
+	Name              string   `json:"name"`
+	Description       string   `json:"description"`
+	Subscribe         []string `json:"subscribe"`
+	Schedule          string   `json:"schedule,omitempty"`
+	Enabled           bool     `json:"enabled"`
+	GlobalStateWrites []string `json:"global_state_writes,omitempty"`
 }
 
 // Automation represents a loaded automation
@@ -46,28 +47,40 @@ type LogEntry struct {
 
 // Runner manages and executes Starlark automations
 type Runner struct {
-	mqttClient  *mqtt.Client
-	stateStore  *state.Store
-	automations map[string]*Automation
-	mu          sync.RWMutex
-	cron        *cron.Cron
-	logs        []LogEntry
-	logsMu      sync.RWMutex
-	maxLogs     int
+	mqttClient     *mqtt.Client
+	stateStore     *state.Store
+	automations    map[string]*Automation
+	libraryManager *LibraryManager
+	mu             sync.RWMutex
+	cron           *cron.Cron
+	logs           []LogEntry
+	logsMu         sync.RWMutex
+	maxLogs        int
 }
 
 // New creates a new automation runner
 func New(mqttClient *mqtt.Client, stateStore *state.Store) *Runner {
 	r := &Runner{
-		mqttClient:  mqttClient,
-		stateStore:  stateStore,
-		automations: make(map[string]*Automation),
-		cron:        cron.New(),
-		logs:        make([]LogEntry, 0, 1000),
-		maxLogs:     1000,
+		mqttClient:     mqttClient,
+		stateStore:     stateStore,
+		automations:    make(map[string]*Automation),
+		libraryManager: NewLibraryManager(),
+		cron:           cron.New(),
+		logs:           make([]LogEntry, 0, 1000),
+		maxLogs:        1000,
 	}
 	r.cron.Start()
 	return r
+}
+
+// LoadLibraries loads all library modules from the automations/lib directory
+func (r *Runner) LoadLibraries(automationsPath string) error {
+	return r.libraryManager.LoadLibraries(automationsPath)
+}
+
+// GetLibraryManager returns the library manager
+func (r *Runner) GetLibraryManager() *LibraryManager {
+	return r.libraryManager
 }
 
 // LoadAutomation loads a Starlark automation from a file
@@ -126,7 +139,7 @@ func (r *Runner) LoadAutomation(filePath string) error {
 	}
 
 	// Create automation context
-	ctx := NewContext(id, r.mqttClient, r.stateStore, r.addLog)
+	ctx := NewContext(id, r.mqttClient, r.stateStore, r.addLog, config.GlobalStateWrites, r.libraryManager)
 
 	automation := &Automation{
 		ID:         id,
@@ -314,6 +327,16 @@ func extractConfig(val starlark.Value) (AutomationConfig, error) {
 	if v, found, _ := dict.Get(starlark.String("enabled")); found {
 		if b, ok := v.(starlark.Bool); ok {
 			config.Enabled = bool(b)
+		}
+	}
+
+	if v, found, _ := dict.Get(starlark.String("global_state_writes")); found {
+		if list, ok := v.(*starlark.List); ok {
+			for i := 0; i < list.Len(); i++ {
+				if s, ok := list.Index(i).(starlark.String); ok {
+					config.GlobalStateWrites = append(config.GlobalStateWrites, string(s))
+				}
+			}
 		}
 	}
 

@@ -1,15 +1,17 @@
 # Homebrain
 
-AI-powered MQTT automation orchestrator. Describe automations in plain English, let an LLM generate the code, and deploy instantly.
+AI-powered MQTT automation framework. Describe automations in plain English, let an LLM generate composable code with shared libraries and global state.
 
 ## Features
 
 - **AI Code Generation** - Describe automations in natural language
+- **Composable Framework** - Reusable library modules and shared global state
+- **Intelligent Agent** - LLM suggests existing functions and creates reusable modules
 - **Event-Driven** - React to MQTT messages instantly (no polling)
 - **Code-First** - Automations are git-tracked Starlark scripts
 - **Hot Reload** - Changes deploy automatically
 - **Sandboxed** - Safe execution with controlled MQTT-only access
-- **Powered by Claude** - Uses Anthropic's Claude for intelligent code generation
+- **Powered by Claude** - Uses Anthropic's Claude Sonnet 4.5
 
 ## Quick Start
 
@@ -57,29 +59,27 @@ AI-powered MQTT automation orchestrator. Describe automations in plain English, 
 
 ## Example Automation
 
+**With Framework Features:**
+
 ```python
 def on_message(topic, payload, ctx):
     data = ctx.json_decode(payload)
 
     if data.get("occupancy"):
-        ctx.publish("zigbee2mqtt/light/set", ctx.json_encode({
-            "state": "ON"
-        }))
-        ctx.set_state("motion_time", ctx.now())
-
-def on_schedule(ctx):
-    last = ctx.get_state("motion_time")
-    if last and ctx.now() - last > 120:
-        ctx.publish("zigbee2mqtt/light/set", ctx.json_encode({
-            "state": "OFF"
-        }))
-        ctx.clear_state("motion_time")
+        # Use library function for debouncing
+        if ctx.lib.timers.debounce_check(ctx, "hallway_motion", 300):
+            ctx.publish("zigbee2mqtt/hallway_light/set", ctx.json_encode({
+                "state": "ON"
+            }))
+            # Update global presence state
+            ctx.set_global("presence.hallway.last_motion", ctx.now())
+            ctx.log("Hallway light activated by motion")
 
 config = {
-    "name": "Motion Light",
-    "description": "Light on with motion, off after 2 min",
-    "subscribe": ["zigbee2mqtt/motion_sensor"],
-    "schedule": "* * * * *",
+    "name": "Hallway Motion Light",
+    "description": "Light on with motion, 5-minute debounce",
+    "subscribe": ["zigbee2mqtt/hallway_motion"],
+    "global_state_writes": ["presence.hallway.*"],  # Declare writable keys
     "enabled": True,
 }
 ```

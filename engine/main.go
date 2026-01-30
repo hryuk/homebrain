@@ -65,6 +65,13 @@ func main() {
 	// Initialize automation runner
 	automationRunner := runner.New(mqttClient, stateStore)
 
+	// Load library modules
+	if err := automationRunner.LoadLibraries("/app/automations"); err != nil {
+		slog.Error("Failed to load library modules", "error", err)
+	} else {
+		slog.Info("Library modules loaded successfully")
+	}
+
 	// Initialize file watcher
 	fileWatcher, err := watcher.New("/app/automations", automationRunner)
 	if err != nil {
@@ -82,7 +89,7 @@ func main() {
 	go fileWatcher.Watch()
 
 	// Start HTTP API for agent communication
-	go startAPI(automationRunner, mqttClient)
+	go startAPI(automationRunner, mqttClient, stateStore)
 
 	// Wait for shutdown signal
 	sigChan := make(chan os.Signal, 1)
@@ -92,7 +99,7 @@ func main() {
 	slog.Info("Shutting down Homebrain Automation Engine")
 }
 
-func startAPI(r *runner.Runner, mqttClient *mqtt.Client) {
+func startAPI(r *runner.Runner, mqttClient *mqtt.Client, stateStore *state.Store) {
 	mux := http.NewServeMux()
 
 	// Health check
@@ -120,6 +127,84 @@ func startAPI(r *runner.Runner, mqttClient *mqtt.Client) {
 		logs := r.GetLogs()
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(logs)
+	})
+
+	// List library modules
+	mux.HandleFunc("GET /library", func(w http.ResponseWriter, req *http.Request) {
+		libManager := r.GetLibraryManager()
+		modules := libManager.GetAllModules()
+		
+		// Convert to a simplified response format
+		type LibraryModuleResponse struct {
+			Name        string   `json:"name"`
+			Description string   `json:"description"`
+			Functions   []string `json:"functions"`
+		}
+		
+		response := make([]LibraryModuleResponse, 0, len(modules))
+		for _, module := range modules {
+			funcNames := make([]string, 0, len(module.Functions))
+			for name := range module.Functions {
+				funcNames = append(funcNames, name)
+			}
+			response = append(response, LibraryModuleResponse{
+				Name:        module.Name,
+				Description: module.Description,
+				Functions:   funcNames,
+			})
+		}
+		
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	})
+
+	// Get library module source code
+	mux.HandleFunc("GET /library/{name}", func(w http.ResponseWriter, req *http.Request) {
+		name := req.PathValue("name")
+		libManager := r.GetLibraryManager()
+		module, ok := libManager.GetModule(name)
+		if !ok {
+			http.Error(w, "Module not found", http.StatusNotFound)
+			return
+		}
+		
+		// Read the source file
+		content, err := os.ReadFile(module.FilePath)
+		if err != nil {
+			http.Error(w, "Failed to read module source", http.StatusInternalServerError)
+			return
+		}
+		
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write(content)
+	})
+
+	// Get global state
+	mux.HandleFunc("GET /global-state", func(w http.ResponseWriter, req *http.Request) {
+		globalState, err := stateStore.GetAllGlobalState()
+		if err != nil {
+			http.Error(w, "Failed to get global state", http.StatusInternalServerError)
+			return
+		}
+		
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(globalState)
+	})
+
+	// Get global state schema (which automations write which keys)
+	mux.HandleFunc("GET /global-state-schema", func(w http.ResponseWriter, req *http.Request) {
+		automations := r.ListAutomations()
+		
+		// Build schema: key patterns -> automation IDs
+		schema := make(map[string][]string)
+		for _, automation := range automations {
+			for _, pattern := range automation.Config.GlobalStateWrites {
+				schema[pattern] = append(schema[pattern], automation.ID)
+			}
+		}
+		
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(schema)
 	})
 
 	slog.Info("Starting Engine API", "port", 9000)

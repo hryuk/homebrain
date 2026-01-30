@@ -50,6 +50,8 @@ class GitOperations(
 
     fun writeFile(filename: String, content: String) {
         val file = repoPath.resolve(filename)
+        // Ensure parent directories exist (e.g., lib/)
+        Files.createDirectories(file.parent)
         Files.writeString(file, content)
         logger.debug { "Wrote file: $filename" }
     }
