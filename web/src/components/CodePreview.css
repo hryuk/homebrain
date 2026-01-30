@@ -1,69 +1,3 @@
-/* Highlight.js theme (GitHub Dark inspired) */
-.hljs {
-  background: #0d0d0d;
-  color: #e0e0e0;
-}
-
-.hljs-comment,
-.hljs-quote {
-  color: #8b949e;
-  font-style: italic;
-}
-
-.hljs-keyword,
-.hljs-selector-tag {
-  color: #ff7b72;
-}
-
-.hljs-string,
-.hljs-doctag,
-.hljs-template-variable,
-.hljs-variable {
-  color: #a5d6ff;
-}
-
-.hljs-number,
-.hljs-literal {
-  color: #79c0ff;
-}
-
-.hljs-function .hljs-title,
-.hljs-title.function_ {
-  color: #d2a8ff;
-}
-
-.hljs-built_in {
-  color: #ffa657;
-}
-
-.hljs-params {
-  color: #e0e0e0;
-}
-
-.hljs-attr,
-.hljs-attribute {
-  color: #79c0ff;
-}
-
-.hljs-meta {
-  color: #8b949e;
-}
-
-.hljs-symbol,
-.hljs-bullet {
-  color: #7ee787;
-}
-
-.hljs-addition {
-  color: #aff5b4;
-  background-color: #033a16;
-}
-
-.hljs-deletion {
-  color: #ffdcd7;
-  background-color: #67060c;
-}
-
 /* Component styles */
 .code-preview {
   margin-top: 1rem;
@@ -71,6 +5,9 @@
   border-radius: 0.5rem;
   overflow: hidden;
   border: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .code-header {
@@ -140,33 +77,35 @@
   color: #fff;
 }
 
-.code-content {
-  margin: 0;
-  padding: 1rem;
-  overflow-x: auto;
-  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  color: #e0e0e0;
+/* CodeMirror container */
+.code-editor-container {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.code-content code {
-  white-space: pre;
-}
-
-.code-editor {
-  width: 100%;
-  min-height: 300px;
-  padding: 1rem;
+/* Override CodeMirror editor background to match our theme */
+.code-editor-container .cm-editor {
   background: #0d0d0d;
-  border: none;
-  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  color: #e0e0e0;
-  resize: vertical;
+  height: 100%;
 }
 
-.code-editor:focus {
+/* Enable scrolling within the editor */
+.code-editor-container .cm-editor .cm-scroller {
+  overflow: auto;
+}
+
+/* Style the active line to be subtle */
+.code-editor-container .cm-editor .cm-activeLine {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* Style selection */
+.code-editor-container .cm-editor .cm-selectionBackground {
+  background-color: rgba(100, 150, 255, 0.2) !important;
+}
+
+/* Remove the border on focus since our container handles it */
+.code-editor-container .cm-editor.cm-focused {
   outline: none;
 }

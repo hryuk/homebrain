@@ -1,10 +1,9 @@
-import { createSignal, createEffect, Show } from 'solid-js'
-import hljs from 'highlight.js/lib/core'
-import python from 'highlight.js/lib/languages/python'
+import { createSignal, createEffect, onMount, onCleanup, Show } from 'solid-js'
+import { EditorView, basicSetup } from 'codemirror'
+import { EditorState } from '@codemirror/state'
+import { python } from '@codemirror/lang-python'
+import { oneDark } from '@codemirror/theme-one-dark'
 import './CodePreview.css'
-
-// Register Python language (Starlark is Python-like)
-hljs.registerLanguage('python', python)
 
 interface CodePreviewProps {
   code: string
@@ -16,33 +15,75 @@ interface CodePreviewProps {
 
 export default function CodePreview(props: CodePreviewProps) {
   const [copied, setCopied] = createSignal(false)
-  const [code, setCode] = createSignal(props.code)
-  let codeRef: HTMLElement | undefined
+  let containerRef: HTMLDivElement | undefined
+  let editorView: EditorView | undefined
 
-  // Update code when props change
-  createEffect(() => {
-    setCode(props.code)
+  onMount(() => {
+    if (!containerRef) return
+
+    const extensions = [
+      basicSetup,
+      python(),
+      oneDark,
+      EditorState.readOnly.of(!props.editable),
+      EditorView.updateListener.of((update) => {
+        if (update.docChanged && props.editable && props.onCodeChange) {
+          props.onCodeChange(update.state.doc.toString())
+        }
+      }),
+      // Custom styling to integrate with our component
+      EditorView.theme({
+        '&': {
+          fontSize: '0.9rem',
+        },
+        '.cm-scroller': {
+          fontFamily: "'Monaco', 'Menlo', 'Consolas', monospace",
+        },
+        '.cm-content': {
+          padding: '0.5rem 0',
+        },
+        '.cm-gutters': {
+          backgroundColor: '#1a1a1a',
+          borderRight: '1px solid #333',
+        },
+        '&.cm-focused': {
+          outline: 'none',
+        },
+      }),
+    ]
+
+    editorView = new EditorView({
+      state: EditorState.create({
+        doc: props.code,
+        extensions,
+      }),
+      parent: containerRef,
+    })
   })
 
-  // Apply syntax highlighting when code changes (read-only mode)
+  // Sync code changes from props (when code prop changes externally)
   createEffect(() => {
-    if (codeRef && !props.editable) {
-      const currentCode = code()
-      codeRef.textContent = currentCode
-      hljs.highlightElement(codeRef)
+    const newCode = props.code
+    if (editorView && newCode !== editorView.state.doc.toString()) {
+      editorView.dispatch({
+        changes: {
+          from: 0,
+          to: editorView.state.doc.length,
+          insert: newCode,
+        },
+      })
     }
   })
 
+  onCleanup(() => {
+    editorView?.destroy()
+  })
+
   const copyCode = async () => {
-    await navigator.clipboard.writeText(code())
+    const code = editorView?.state.doc.toString() || props.code
+    await navigator.clipboard.writeText(code)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
-  }
-
-  const handleCodeChange = (e: Event) => {
-    const newCode = (e.target as HTMLTextAreaElement).value
-    setCode(newCode)
-    props.onCodeChange?.(newCode)
   }
 
   const getTypeLabel = () => {
@@ -64,18 +105,7 @@ export default function CodePreview(props: CodePreviewProps) {
           {copied() ? 'Copied!' : 'Copy'}
         </button>
       </div>
-      {props.editable ? (
-        <textarea
-          class="code-editor"
-          value={code()}
-          onInput={handleCodeChange}
-          spellcheck={false}
-        />
-      ) : (
-        <pre class="code-content">
-          <code ref={codeRef} class="language-python">{code()}</code>
-        </pre>
-      )}
+      <div class="code-editor-container" ref={containerRef} />
     </div>
   )
 }
