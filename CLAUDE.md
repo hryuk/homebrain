@@ -303,7 +303,7 @@ ENGINE_URL=http://engine:9000      # For agent
 AUTOMATIONS_PATH=/app/automations  # For agent
 ```
 
-**Note:** The default LLM model is `claude-haiku-4-5` (configured in `application.yml`).
+**Note:** The default LLM model is `claude-sonnet-4-5` (configured in `application.yml`).
 
 ## Embabel Agent Framework
 

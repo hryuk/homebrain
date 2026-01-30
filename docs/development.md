@@ -58,7 +58,7 @@ Configuration in `application.yml`:
 # Embabel configuration
 embabel:
   models:
-    default-llm: claude-haiku-4-5
+    default-llm: claude-sonnet-4-5
 
 # Application configuration
 app:

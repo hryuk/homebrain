@@ -15,7 +15,7 @@ logging:
 # Embabel Agent configuration for tests
 embabel:
   models:
-    default-llm: claude-haiku-4-5
+    default-llm: claude-sonnet-4-5
 
 # Test configuration
 app:
