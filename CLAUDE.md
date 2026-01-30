@@ -86,6 +86,7 @@ After any code change, update relevant documentation:
 - `internal/runner/starlark.go` - Loads and manages automations
 - `internal/runner/library.go` - Library module loader and manager
 - `internal/runner/context.go` - `ctx.*` functions exposed to Starlark scripts
+- `internal/runner/validation.go` - Starlark code validation without deploying
 - `internal/watcher/watcher.go` - File watcher for hot-reload (includes lib/ watching)
 - `internal/state/state.go` - BoltDB persistence for per-automation and global state
 
@@ -106,6 +107,8 @@ After any code change, update relevant documentation:
       - `GlobalStateSchema.kt` - State ownership tracking
     - `conversation/` - Chat domain
       - `ChatResponse.kt`, `CodeProposal.kt`, `FileProposal.kt`, `Message.kt`
+    - `validation/` - Code validation domain
+      - `ValidationResult.kt` - Validation result value object
     - `commit/` - Git commit value object
   - `application/` - Use cases (orchestration layer)
     - `AutomationUseCase.kt` - CRUD operations for automations
@@ -123,6 +126,7 @@ After any code change, update relevant documentation:
       - `EngineClient.kt` - REST client for Go engine
     - `ai/` - LLM integration
       - `EmbabelChatAgent.kt` - Embabel agent wrapper
+      - `CodeFixerAgent.kt` - Fixes Starlark validation errors
       - `MqttLlmTools.kt` - LLM-callable tools
       - `PromptLoader.kt` - Loads prompts from Markdown files
     - `websocket/` - Real-time communication
@@ -199,6 +203,7 @@ cd web && npm run dev
 | GET | `/library/{name}` | Get module source code |
 | GET | `/global-state` | Get global state schema (keys and which automations own them) |
 | GET | `/global-state-schema` | Get current global state values |
+| POST | `/validate` | Validate Starlark code without deploying |
 
 ## Starlark Automation Format
 
@@ -362,6 +367,18 @@ The LLM will propose both a library function and the automation that uses it, de
 
 The system prompt is stored in `resources/prompts/chat-system-prompt.md` and contains explicit criteria for when to extract logic into libraries vs inline it.
 
+### Code Validation and Fixing
+
+Generated Starlark code is automatically validated against the engine before being shown to the user. If validation fails, a dedicated `CodeFixerAgent` attempts to fix the errors (up to 3 times). If all attempts fail, the user receives a helpful message suggesting they clarify their requirements.
+
+**Validation Flow:**
+1. LLM generates code via `EmbabelChatAgent`
+2. `ChatUseCase` validates each file via `EngineClient.validateCode()`
+3. If invalid, `CodeFixerAgent` attempts to fix using error context
+4. Fixed code is re-validated
+5. Loop until valid or max attempts (3) reached
+6. Return validated code or failure message
+
 ### Prompt Management
 
 Prompts are stored as Markdown files in `agent/src/main/resources/prompts/` for easier editing and version control:
@@ -369,6 +386,7 @@ Prompts are stored as Markdown files in `agent/src/main/resources/prompts/` for 
 | File | Purpose |
 |------|---------|
 | `chat-system-prompt.md` | Main system prompt for the chat agent |
+| `code-fixer-prompt.md` | System prompt for fixing Starlark validation errors |
 
 **PromptLoader** (`infrastructure/ai/PromptLoader.kt`) provides:
 - Loading prompts from classpath resources

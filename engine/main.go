@@ -207,6 +207,20 @@ func startAPI(r *runner.Runner, mqttClient *mqtt.Client, stateStore *state.Store
 		json.NewEncoder(w).Encode(schema)
 	})
 
+	// Validate Starlark code without deploying
+	mux.HandleFunc("POST /validate", func(w http.ResponseWriter, req *http.Request) {
+		var validationReq runner.ValidationRequest
+		if err := json.NewDecoder(req.Body).Decode(&validationReq); err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		result := runner.ValidateCode(validationReq.Code, validationReq.Type)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+	})
+
 	slog.Info("Starting Engine API", "port", 9000)
 	if err := http.ListenAndServe(":9000", mux); err != nil {
 		slog.Error("API server failed", "error", err)

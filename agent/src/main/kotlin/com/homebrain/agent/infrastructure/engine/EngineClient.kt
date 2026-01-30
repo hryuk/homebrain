@@ -2,11 +2,13 @@ package com.homebrain.agent.infrastructure.engine
 
 import com.homebrain.agent.domain.library.LibraryModule
 import com.homebrain.agent.domain.library.GlobalStateSchema
+import com.homebrain.agent.domain.validation.ValidationResult
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.bodyToMono
+import reactor.core.publisher.Mono
 
 private val logger = KotlinLogging.logger {}
 
@@ -154,4 +156,49 @@ class EngineClient(
             emptyMap()
         }
     }
+
+    /**
+     * Validates Starlark code against the engine without deploying.
+     * 
+     * @param code The Starlark code to validate
+     * @param type The type of code: "automation" or "library"
+     * @return ValidationResult indicating if the code is valid and any errors
+     */
+    fun validateCode(code: String, type: String): ValidationResult {
+        logger.debug { "Validating $type code (${code.length} chars)" }
+        return try {
+            val request = ValidationRequest(code = code, type = type)
+            val response = webClient.post()
+                .uri("/validate")
+                .bodyValue(request)
+                .retrieve()
+                .bodyToMono<ValidationResponse>()
+                .block()
+
+            if (response != null) {
+                ValidationResult(valid = response.valid, errors = response.errors ?: emptyList())
+            } else {
+                ValidationResult.failure("No response from validation endpoint")
+            }
+        } catch (e: Exception) {
+            logger.warn(e) { "Failed to validate code against engine" }
+            ValidationResult.failure("Validation request failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Request body for the /validate endpoint.
+     */
+    private data class ValidationRequest(
+        val code: String,
+        val type: String
+    )
+
+    /**
+     * Response body from the /validate endpoint.
+     */
+    private data class ValidationResponse(
+        val valid: Boolean,
+        val errors: List<String>? = null
+    )
 }

@@ -153,6 +153,8 @@ Homebrain is a Docker-based, composable automation framework for MQTT systems. I
 │  │   ├── ChatResponse.kt        - Response model            │
 │  │   ├── CodeProposal.kt        - Value object              │
 │  │   └── Message.kt             - Value object              │
+│  ├── validation/                                               │
+│  │   └── ValidationResult.kt    - Value object              │
 │  └── commit/                                                  │
 │      └── Commit.kt              - Value object              │
 ├─────────────────────────────────────────────────────────────┤
@@ -165,6 +167,7 @@ Homebrain is a Docker-based, composable automation framework for MQTT systems. I
 │  │   └── EngineClient             - HTTP client to Engine   │
 │  ├── ai/                                                      │
 │  │   ├── EmbabelChatAgent         - Embabel integration     │
+│  │   ├── CodeFixerAgent           - Fixes validation errors │
 │  │   └── MqttLlmTools             - LLM-callable tools      │
 │  └── websocket/                                               │
 │      └── LogsWebSocketHandler     - Real-time log streaming │
@@ -221,6 +224,7 @@ Homebrain is a Docker-based, composable automation framework for MQTT systems. I
 - `GET /library/{name}` - Get library module source code
 - `GET /global-state` - Get current global state values
 - `GET /global-state-schema` - Get global state ownership schema
+- `POST /validate` - Validate Starlark code without deploying
 
 ## Data Flow
 
@@ -242,10 +246,22 @@ User                Web UI              Agent                    Engine
   │                   │                   │ │ Embabel Agent      │ │
   │                   │                   │ │ 1. Use MqttTools   │ │
   │                   │                   │ │ 2. Generate code   │ │
-  │                   │                   │ │ 3. Return proposal │ │
   │                   │                   │ └────────────────────┘ │
+  │                   │                   │                        │
+  │                   │                   │  POST /validate        │
+  │                   │                   │───────────────────────►│
+  │                   │                   │◄───────────────────────│
+  │                   │                   │                        │
+  │                   │                   │ ┌────────────────────┐ │
+  │                   │                   │ │ If invalid:        │ │
+  │                   │                   │ │ CodeFixerAgent     │ │
+  │                   │                   │ │ fixes and retries  │ │
+  │                   │                   │ │ (up to 3 times)    │ │
+  │                   │                   │ └────────────────────┘ │
+  │                   │                   │                        │
   │                   │◄──────────────────│                        │
-  │ Code proposal     │                   │                        │
+  │ Validated code    │                   │                        │
+  │ proposal          │                   │                        │
   │◄──────────────────│                   │                        │
   │                   │                   │                        │
   │ [User confirms]   │                   │                        │
@@ -261,6 +277,22 @@ User                Web UI              Agent                    Engine
   │ Success           │                   │                        │
   │◄──────────────────│                   │                        │
 ```
+
+### Code Validation Flow
+
+Generated Starlark code is validated before being shown to the user:
+
+1. **LLM generates code** via EmbabelChatAgent
+2. **ChatUseCase validates** each file via `EngineClient.validateCode()`
+3. **If validation fails:**
+   - CodeFixerAgent receives original code + error messages
+   - Attempts to fix the code
+   - Fixed code is re-validated
+   - Loop continues until valid or max attempts (3) reached
+4. **If all attempts fail:**
+   - User receives a message explaining the issue
+   - No code proposal is returned
+   - User can try again with clearer requirements
 
 ### Automation Execution
 

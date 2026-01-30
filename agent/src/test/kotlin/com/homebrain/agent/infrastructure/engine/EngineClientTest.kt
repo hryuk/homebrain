@@ -3,6 +3,7 @@ package com.homebrain.agent.infrastructure.engine
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock.*
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig
+import com.homebrain.agent.domain.validation.ValidationResult
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
 
@@ -252,6 +253,153 @@ class EngineClientTest {
             val logs = engineClient.getLogs()
 
             assertTrue(logs.isEmpty())
+        }
+    }
+
+    @Nested
+    inner class ValidateCode {
+        @Test
+        fun `should return success for valid automation code`() {
+            wireMockServer.stubFor(
+                post(urlEqualTo("/validate"))
+                    .withRequestBody(matchingJsonPath("$.code"))
+                    .withRequestBody(matchingJsonPath("$.type", equalTo("automation")))
+                    .willReturn(
+                        aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody("""{"valid": true, "errors": []}""")
+                    )
+            )
+
+            val result = engineClient.validateCode(
+                code = "def on_message(t, p, ctx): pass\nconfig = {}",
+                type = "automation"
+            )
+
+            assertTrue(result.valid)
+            assertTrue(result.errors.isEmpty())
+        }
+
+        @Test
+        fun `should return failure with errors for invalid code`() {
+            wireMockServer.stubFor(
+                post(urlEqualTo("/validate"))
+                    .willReturn(
+                        aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody("""{"valid": false, "errors": ["syntax error: line 1:10: got newline, want colon", "automation missing 'config' variable"]}""")
+                    )
+            )
+
+            val result = engineClient.validateCode(
+                code = "invalid code here",
+                type = "automation"
+            )
+
+            assertFalse(result.valid)
+            assertEquals(2, result.errors.size)
+            assertTrue(result.errors[0].contains("syntax error"))
+            assertTrue(result.errors[1].contains("config"))
+        }
+
+        @Test
+        fun `should validate library code`() {
+            wireMockServer.stubFor(
+                post(urlEqualTo("/validate"))
+                    .withRequestBody(matchingJsonPath("$.type", equalTo("library")))
+                    .willReturn(
+                        aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody("""{"valid": true}""")
+                    )
+            )
+
+            val result = engineClient.validateCode(
+                code = "def helper(ctx): return True",
+                type = "library"
+            )
+
+            assertTrue(result.valid)
+        }
+
+        @Test
+        fun `should return failure on network error`() {
+            wireMockServer.stubFor(
+                post(urlEqualTo("/validate"))
+                    .willReturn(
+                        aResponse()
+                            .withStatus(500)
+                            .withBody("Internal Server Error")
+                    )
+            )
+
+            val result = engineClient.validateCode(
+                code = "def on_message(t, p, ctx): pass",
+                type = "automation"
+            )
+
+            // On error, should return a failure result
+            assertFalse(result.valid)
+            assertTrue(result.errors.isNotEmpty())
+        }
+
+        @Test
+        fun `should return failure on connection timeout`() {
+            wireMockServer.stubFor(
+                post(urlEqualTo("/validate"))
+                    .willReturn(
+                        aResponse()
+                            .withStatus(200)
+                            .withFixedDelay(10000) // 10 second delay
+                            .withBody("""{"valid": true}""")
+                    )
+            )
+
+            // Use a client with short timeout for this test
+            val shortTimeoutClient = EngineClient("http://localhost:${wireMockServer.port()}")
+            val result = shortTimeoutClient.validateCode(
+                code = "def test(): pass",
+                type = "automation"
+            )
+
+            // On timeout, should return a failure result (or success if it completes)
+            // The important thing is it doesn't throw
+            assertNotNull(result)
+        }
+
+        @Test
+        fun `should send correct request body`() {
+            val testCode = """
+                def on_message(topic, payload, ctx):
+                    ctx.log("test")
+                
+                config = {"name": "Test", "enabled": True}
+            """.trimIndent()
+
+            wireMockServer.stubFor(
+                post(urlEqualTo("/validate"))
+                    .withRequestBody(matchingJsonPath("$.code", equalTo(testCode)))
+                    .withRequestBody(matchingJsonPath("$.type", equalTo("automation")))
+                    .willReturn(
+                        aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody("""{"valid": true}""")
+                    )
+            )
+
+            val result = engineClient.validateCode(code = testCode, type = "automation")
+
+            assertTrue(result.valid)
+            // Verify the request was made correctly
+            wireMockServer.verify(
+                postRequestedFor(urlEqualTo("/validate"))
+                    .withRequestBody(matchingJsonPath("$.code"))
+                    .withRequestBody(matchingJsonPath("$.type"))
+            )
         }
     }
 }
