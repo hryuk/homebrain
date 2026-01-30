@@ -1,0 +1,203 @@
+.global-state-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.global-state-viewer .panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  background: #1a1a1a;
+  border-bottom: 1px solid #333;
+}
+
+.global-state-viewer .header-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.global-state-viewer .panel-header h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0;
+}
+
+.global-state-viewer .entry-count {
+  font-size: 0.8rem;
+  color: #666;
+  padding: 0.25rem 0.5rem;
+  background: #252525;
+  border-radius: 0.25rem;
+}
+
+.global-state-viewer .header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.global-state-viewer .last-update {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.global-state-viewer .refresh-btn,
+.global-state-viewer .auto-refresh-btn {
+  padding: 0.25rem 0.75rem;
+  background: transparent;
+  border: 1px solid #444;
+  border-radius: 0.25rem;
+  color: #888;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.global-state-viewer .refresh-btn:hover,
+.global-state-viewer .auto-refresh-btn:hover {
+  background: #252525;
+  color: #fff;
+}
+
+.global-state-viewer .auto-refresh-btn.active {
+  background: #1a3a1a;
+  border-color: #2a4a2a;
+  color: #8f8;
+}
+
+.global-state-viewer .loading,
+.global-state-viewer .empty {
+  padding: 2rem;
+  text-align: center;
+  color: #666;
+}
+
+.global-state-viewer .empty .hint {
+  font-size: 0.85rem;
+  color: #555;
+  margin-top: 0.5rem;
+  display: block;
+}
+
+.global-state-viewer .state-table {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.global-state-viewer .table-header {
+  display: flex;
+  padding: 0.75rem 1.5rem;
+  background: #1a1a1a;
+  border-bottom: 1px solid #333;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.global-state-viewer .table-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.global-state-viewer .col-key {
+  flex: 2;
+  min-width: 200px;
+}
+
+.global-state-viewer .col-value {
+  flex: 3;
+  min-width: 200px;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.global-state-viewer .col-owners {
+  flex: 1;
+  min-width: 150px;
+}
+
+.global-state-viewer .group-header {
+  padding: 0.5rem 1.5rem;
+  background: #0d0d0d;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #252525;
+}
+
+.global-state-viewer .state-row {
+  display: flex;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid #252525;
+  align-items: flex-start;
+}
+
+.global-state-viewer .state-row:hover {
+  background: #1a1a1a;
+}
+
+.global-state-viewer .key-name {
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.85rem;
+  color: #8af;
+}
+
+.global-state-viewer .value-content {
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.85rem;
+  color: #e0e0e0;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.global-state-viewer .value-preview {
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.global-state-viewer .expand-btn {
+  padding: 0.125rem 0.25rem;
+  background: transparent;
+  border: 1px solid #444;
+  border-radius: 0.125rem;
+  color: #888;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.7rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.global-state-viewer .expand-btn:hover {
+  background: #252525;
+  color: #fff;
+}
+
+.global-state-viewer .owner-tag {
+  display: inline-block;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.75rem;
+  padding: 0.125rem 0.4rem;
+  background: #252525;
+  border-radius: 0.25rem;
+  color: #8f8;
+  margin-right: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.global-state-viewer .no-owner {
+  font-size: 0.75rem;
+  color: #555;
+  font-style: italic;
+}

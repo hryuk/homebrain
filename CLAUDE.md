@@ -112,6 +112,8 @@ After any code change, update relevant documentation:
     - `ChatUseCase.kt` - Chat conversation handling
     - `TopicUseCase.kt` - Topic discovery
     - `LogUseCase.kt` - Log retrieval
+    - `LibraryUseCase.kt` - Library module operations
+    - `GlobalStateUseCase.kt` - Global state retrieval
   - `infrastructure/` - External adapters
     - `persistence/` - Repository implementations
       - `GitAutomationRepository.kt` - Git-based automation storage
@@ -126,10 +128,11 @@ After any code change, update relevant documentation:
       - `LogsWebSocketHandler.kt` - Log streaming
   - `api/` - Inbound adapters (HTTP layer)
     - `rest/` - REST controllers
-      - `ChatController.kt`, `AutomationController.kt`, etc.
+      - `ChatController.kt`, `AutomationController.kt`, `LibraryController.kt`, `GlobalStateController.kt`, etc.
     - `dto/` - Request/response DTOs
-      - `ChatDto.kt`, `AutomationDto.kt`, `TopicDto.kt`
+      - `ChatDto.kt`, `AutomationDto.kt`, `TopicDto.kt`, `LibraryDto.kt`, `GlobalStateDto.kt`
     - `mapper/` - Domain to DTO mappers
+      - `AutomationMapper.kt`, `LibraryMapper.kt`, `GlobalStateMapper.kt`, etc.
   - `config/` - Spring configuration
   - `exception/` - Error handling
 
@@ -138,6 +141,8 @@ After any code change, update relevant documentation:
 - `src/components/Chat.tsx` - Chat interface for creating automations
 - `src/components/CodePreview.tsx` - Code display with syntax highlighting
 - `src/components/AutomationList.tsx` - Automation management
+- `src/components/LibraryViewer.tsx` - Library module browser with source code viewer
+- `src/components/GlobalStateViewer.tsx` - Global state viewer with ownership info
 - `src/components/LogViewer.tsx` - Real-time log viewer
 
 ## Commands
@@ -173,6 +178,9 @@ cd web && npm run dev
 | PUT | `/api/automations/{id}` | Update automation |
 | DELETE | `/api/automations/{id}` | Delete automation |
 | GET | `/api/topics` | List discovered MQTT topics |
+| GET | `/api/libraries` | List library modules with functions |
+| GET | `/api/libraries/{name}` | Get library module source code |
+| GET | `/api/global-state` | Get global state values with ownership |
 | GET | `/api/logs` | Get recent logs |
 | GET | `/api/history` | Git commit history |
 | GET | `/health` | Health check (returns "ok") |

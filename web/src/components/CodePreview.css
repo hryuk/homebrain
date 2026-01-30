@@ -1,3 +1,70 @@
+/* Highlight.js theme (GitHub Dark inspired) */
+.hljs {
+  background: #0d0d0d;
+  color: #e0e0e0;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: #8b949e;
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag {
+  color: #ff7b72;
+}
+
+.hljs-string,
+.hljs-doctag,
+.hljs-template-variable,
+.hljs-variable {
+  color: #a5d6ff;
+}
+
+.hljs-number,
+.hljs-literal {
+  color: #79c0ff;
+}
+
+.hljs-function .hljs-title,
+.hljs-title.function_ {
+  color: #d2a8ff;
+}
+
+.hljs-built_in {
+  color: #ffa657;
+}
+
+.hljs-params {
+  color: #e0e0e0;
+}
+
+.hljs-attr,
+.hljs-attribute {
+  color: #79c0ff;
+}
+
+.hljs-meta {
+  color: #8b949e;
+}
+
+.hljs-symbol,
+.hljs-bullet {
+  color: #7ee787;
+}
+
+.hljs-addition {
+  color: #aff5b4;
+  background-color: #033a16;
+}
+
+.hljs-deletion {
+  color: #ffdcd7;
+  background-color: #67060c;
+}
+
+/* Component styles */
 .code-preview {
   margin-top: 1rem;
   background: #0d0d0d;

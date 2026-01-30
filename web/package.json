@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "highlight.js": "^11.10.0",
     "solid-js": "^1.9.3"
   },
   "devDependencies": {

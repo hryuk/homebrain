@@ -1,5 +1,10 @@
-import { createSignal } from 'solid-js'
+import { createSignal, createEffect } from 'solid-js'
+import hljs from 'highlight.js/lib/core'
+import python from 'highlight.js/lib/languages/python'
 import './CodePreview.css'
+
+// Register Python language (Starlark is Python-like)
+hljs.registerLanguage('python', python)
 
 interface CodePreviewProps {
   code: string
@@ -11,6 +16,21 @@ interface CodePreviewProps {
 export default function CodePreview(props: CodePreviewProps) {
   const [copied, setCopied] = createSignal(false)
   const [code, setCode] = createSignal(props.code)
+  let codeRef: HTMLElement | undefined
+
+  // Update code when props change
+  createEffect(() => {
+    setCode(props.code)
+  })
+
+  // Apply syntax highlighting when code changes (read-only mode)
+  createEffect(() => {
+    if (codeRef && !props.editable) {
+      const currentCode = code()
+      codeRef.textContent = currentCode
+      hljs.highlightElement(codeRef)
+    }
+  })
 
   const copyCode = async () => {
     await navigator.clipboard.writeText(code())
@@ -41,7 +61,7 @@ export default function CodePreview(props: CodePreviewProps) {
         />
       ) : (
         <pre class="code-content">
-          <code>{code()}</code>
+          <code ref={codeRef} class="language-python">{code()}</code>
         </pre>
       )}
     </div>

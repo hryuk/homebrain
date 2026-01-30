@@ -92,6 +92,8 @@ Homebrain is a Docker-based, composable automation framework for MQTT systems. I
 - Chat interface for natural language automation descriptions
 - Code preview with syntax highlighting
 - Automation management (list, edit, delete)
+- Library module browser with source code viewer
+- Global state viewer with ownership information (auto-refresh)
 - Real-time log viewer via WebSocket
 
 **Port:** 5173
@@ -118,6 +120,8 @@ Homebrain is a Docker-based, composable automation framework for MQTT systems. I
 │  │   ├── ChatController      - Conversational AI endpoint    │
 │  │   ├── AutomationController - CRUD for automations        │
 │  │   ├── TopicsController    - MQTT topic discovery         │
+│  │   ├── LibraryController   - Library module browsing      │
+│  │   ├── GlobalStateController - Global state retrieval     │
 │  │   ├── LogsController      - Log retrieval                │
 │  │   ├── HistoryController   - Git history                  │
 │  │   └── HealthController    - Health check endpoint        │
@@ -128,6 +132,8 @@ Homebrain is a Docker-based, composable automation framework for MQTT systems. I
 │  ├── AutomationUseCase - CRUD operations, filename sanitize │
 │  ├── ChatUseCase      - Chat conversation handling          │
 │  ├── TopicUseCase     - Topic discovery                     │
+│  ├── LibraryUseCase   - Library module operations           │
+│  ├── GlobalStateUseCase - Global state retrieval            │
 │  └── LogUseCase       - Log retrieval                       │
 ├─────────────────────────────────────────────────────────────┤
 │  Domain Layer (Pure Business Logic)                          │
@@ -181,6 +187,9 @@ Homebrain is a Docker-based, composable automation framework for MQTT systems. I
 | PUT | `/api/automations/{id}` | Update automation |
 | DELETE | `/api/automations/{id}` | Delete automation |
 | GET | `/api/topics` | List discovered MQTT topics |
+| GET | `/api/libraries` | List library modules with functions |
+| GET | `/api/libraries/{name}` | Get library module source code |
+| GET | `/api/global-state` | Get global state values with ownership |
 | GET | `/api/logs` | Get recent logs |
 | GET | `/api/history` | Get git commit history |
 | GET | `/health` | Health check (returns "ok") |

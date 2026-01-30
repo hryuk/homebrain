@@ -1,6 +1,7 @@
 package com.homebrain.agent.exception
 
 import com.homebrain.agent.application.AutomationNotFoundException
+import com.homebrain.agent.application.LibraryModuleNotFoundException
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -24,6 +25,14 @@ class HomebrainExceptionHandler {
         return ResponseEntity
             .status(HttpStatus.NOT_FOUND)
             .body(ErrorResponse("not_found", e.message ?: "Automation not found"))
+    }
+
+    @ExceptionHandler(LibraryModuleNotFoundException::class)
+    fun handleLibraryModuleNotFoundException(e: LibraryModuleNotFoundException): ResponseEntity<ErrorResponse> {
+        logger.warn { e.message }
+        return ResponseEntity
+            .status(HttpStatus.NOT_FOUND)
+            .body(ErrorResponse("not_found", e.message ?: "Library module not found"))
     }
 
     @ExceptionHandler(NoSuchFileException::class)
