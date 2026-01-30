@@ -50,9 +50,10 @@ AI-powered MQTT automation orchestrator. Describe automations in plain English, 
 
 ## Documentation
 
-- [Architecture](docs/architecture.md) - System design and components
+- [Architecture](docs/architecture.md) - System design and DDD architecture
 - [Writing Automations](docs/automations.md) - Starlark syntax and examples
 - [Development Guide](docs/development.md) - Local setup and contributing
+- [Testing Guide](docs/testing.md) - TDD practices and property-based testing
 
 ## Example Automation
 

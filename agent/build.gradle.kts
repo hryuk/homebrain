@@ -68,6 +68,13 @@ dependencies {
     
     // WireMock for HTTP mocking (simulating slow API responses)
     testImplementation("org.wiremock:wiremock-standalone:3.10.0")
+    
+    // Property-based testing
+    testImplementation("io.kotest:kotest-property:5.9.1")
+    testImplementation("io.kotest:kotest-assertions-core:5.9.1")
+    
+    // Mocking
+    testImplementation("io.mockk:mockk:1.13.13")
 }
 
 kotlin {

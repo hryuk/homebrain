@@ -1,6 +1,6 @@
 package com.homebrain.agent.config
 
-import com.homebrain.agent.websocket.LogsWebSocketHandler
+import com.homebrain.agent.infrastructure.websocket.LogsWebSocketHandler
 import org.springframework.context.annotation.Configuration
 import org.springframework.web.socket.config.annotation.EnableWebSocket
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer

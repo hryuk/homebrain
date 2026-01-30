@@ -59,30 +59,61 @@ Homebrain is a Docker-based, code-first solution for orchestrating MQTT automati
 - **Spring AI (via Embabel)** - LLM integration (Anthropic Claude)
 - **JGit** - Git operations for version control
 
-**Architecture:**
+**Architecture (DDD/Hexagonal):**
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      Agent API                               │
 ├─────────────────────────────────────────────────────────────┤
-│  Controllers (REST API)                                      │
-│  ├── ChatController      - Conversational AI endpoint        │
-│  ├── AutomationController - CRUD for automations            │
-│  ├── TopicsController    - MQTT topic discovery             │
-│  ├── LogsController      - Log retrieval                    │
-│  ├── HistoryController   - Git history                      │
-│  └── HealthController    - Health check endpoint            │
+│  API Layer (Inbound Adapters)                                │
+│  ├── rest/                                                    │
+│  │   ├── ChatController      - Conversational AI endpoint    │
+│  │   ├── AutomationController - CRUD for automations        │
+│  │   ├── TopicsController    - MQTT topic discovery         │
+│  │   ├── LogsController      - Log retrieval                │
+│  │   ├── HistoryController   - Git history                  │
+│  │   └── HealthController    - Health check endpoint        │
+│  ├── dto/            - Request/response DTOs                 │
+│  └── mapper/         - Domain ↔ DTO mapping                  │
 ├─────────────────────────────────────────────────────────────┤
-│  Embabel Agents                                              │
-│  ├── ConversationalChatAgent - Main chat interface          │
-│  │   └── Uses MqttTools for smart home queries              │
-│  └── AutomationCodeAgent     - Code generation pipeline     │
+│  Application Layer (Use Cases)                               │
+│  ├── AutomationUseCase - CRUD operations, filename sanitize │
+│  ├── ChatUseCase      - Chat conversation handling          │
+│  ├── TopicUseCase     - Topic discovery                     │
+│  └── LogUseCase       - Log retrieval                       │
 ├─────────────────────────────────────────────────────────────┤
-│  Tools (@LlmTool annotated)                                  │
-│  └── MqttTools - getAllTopics, searchTopics, getAutomations │
+│  Domain Layer (Pure Business Logic)                          │
+│  ├── automation/                                              │
+│  │   ├── Automation.kt          - Aggregate root            │
+│  │   ├── AutomationId.kt        - Value object              │
+│  │   ├── AutomationCode.kt      - Value object              │
+│  │   └── AutomationRepository.kt - Port (interface)         │
+│  ├── topic/                                                   │
+│  │   ├── Topic.kt               - Entity                    │
+│  │   ├── TopicPath.kt           - Value object              │
+│  │   └── TopicRepository.kt     - Port (interface)          │
+│  ├── conversation/                                            │
+│  │   ├── ChatResponse.kt        - Response model            │
+│  │   ├── CodeProposal.kt        - Value object              │
+│  │   └── Message.kt             - Value object              │
+│  └── commit/                                                  │
+│      └── Commit.kt              - Value object              │
 ├─────────────────────────────────────────────────────────────┤
-│  Services                                                    │
-│  ├── EngineProxyService - Communicates with Engine API      │
-│  └── GitService         - File and version control          │
+│  Infrastructure Layer (Outbound Adapters)                    │
+│  ├── persistence/                                             │
+│  │   ├── GitAutomationRepository  - Git-based storage       │
+│  │   ├── EngineTopicRepository    - Engine topic discovery  │
+│  │   └── GitOperations            - Low-level git ops       │
+│  ├── engine/                                                  │
+│  │   └── EngineClient             - HTTP client to Engine   │
+│  ├── ai/                                                      │
+│  │   ├── EmbabelChatAgent         - Embabel integration     │
+│  │   └── MqttLlmTools             - LLM-callable tools      │
+│  └── websocket/                                               │
+│      └── LogsWebSocketHandler     - Real-time log streaming │
+├─────────────────────────────────────────────────────────────┤
+│  Configuration & Exception Handling                          │
+│  ├── config/          - Spring configuration                 │
+│  └── exception/       - Global exception handlers           │
 └─────────────────────────────────────────────────────────────┘
 ```
 

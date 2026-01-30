@@ -95,34 +95,70 @@ The Vite dev server proxies `/api` and `/ws` to the Agent.
 homebrain/
 ├── docker-compose.yml          # Container orchestration
 ├── .env.example                # Environment template
+├── CLAUDE.md                   # AI assistant project guide
 │
-├── agent/                      # Agent API (Kotlin/Embabel)
+├── agent/                      # Agent API (Kotlin/Embabel/DDD)
 │   ├── build.gradle.kts        # Gradle build with Embabel deps
 │   ├── src/main/kotlin/com/homebrain/agent/
 │   │   ├── AgentApplication.kt          # Spring Boot entry point
-│   │   ├── controller/                  # REST endpoints
-│   │   │   ├── ChatController.kt        # AI chat endpoint
-│   │   │   ├── AutomationController.kt  # CRUD operations
-│   │   │   ├── TopicsController.kt      # MQTT topics
-│   │   │   ├── LogsController.kt        # Log retrieval
-│   │   │   ├── HistoryController.kt     # Git history
-│   │   │   └── HealthController.kt      # Health check
-│   │   ├── agent/                       # Embabel agents
-│   │   │   ├── ConversationalChatAgent.kt  # Main chat agent
-│   │   │   └── AutomationCodeAgent.kt      # Code generation
-│   │   ├── tools/                       # LLM tools
-│   │   │   └── MqttTools.kt             # Smart home queries
-│   │   ├── service/                     # Business logic
-│   │   │   ├── EngineProxyService.kt    # Engine communication
-│   │   │   └── GitService.kt            # Git operations
-│   │   ├── domain/                      # Domain models
-│   │   │   ├── ChatModels.kt            # Chat response models
-│   │   │   └── CodeGenerationModels.kt  # Code gen pipeline models
-│   │   ├── dto/                         # API DTOs
-│   │   │   └── DTOs.kt                  # Request/response DTOs
-│   │   └── config/                      # Spring configuration
-│   └── src/main/resources/
-│       └── application.yml
+│   │   ├── domain/                      # Pure domain (no dependencies)
+│   │   │   ├── automation/              # Automation aggregate
+│   │   │   │   ├── Automation.kt        # Aggregate root
+│   │   │   │   ├── AutomationId.kt      # Value object
+│   │   │   │   ├── AutomationCode.kt    # Value object
+│   │   │   │   └── AutomationRepository.kt # Port
+│   │   │   ├── topic/                   # Topic entity
+│   │   │   │   ├── Topic.kt             # Entity
+│   │   │   │   ├── TopicPath.kt         # Value object
+│   │   │   │   └── TopicRepository.kt   # Port
+│   │   │   ├── conversation/            # Chat domain
+│   │   │   │   ├── ChatResponse.kt
+│   │   │   │   ├── CodeProposal.kt
+│   │   │   │   └── Message.kt
+│   │   │   └── commit/                  # Git commit VO
+│   │   │       └── Commit.kt
+│   │   ├── application/                 # Use cases
+│   │   │   ├── AutomationUseCase.kt     # CRUD operations
+│   │   │   ├── ChatUseCase.kt           # Chat handling
+│   │   │   ├── TopicUseCase.kt          # Topic discovery
+│   │   │   └── LogUseCase.kt            # Log retrieval
+│   │   ├── infrastructure/              # External adapters
+│   │   │   ├── persistence/
+│   │   │   │   ├── GitAutomationRepository.kt
+│   │   │   │   ├── EngineTopicRepository.kt
+│   │   │   │   └── GitOperations.kt
+│   │   │   ├── engine/
+│   │   │   │   └── EngineClient.kt      # HTTP client
+│   │   │   ├── ai/
+│   │   │   │   ├── EmbabelChatAgent.kt  # AI integration
+│   │   │   │   └── MqttLlmTools.kt      # LLM tools
+│   │   │   └── websocket/
+│   │   │       └── LogsWebSocketHandler.kt
+│   │   ├── api/                         # Inbound adapters
+│   │   │   ├── rest/                    # Controllers
+│   │   │   │   ├── ChatController.kt
+│   │   │   │   ├── AutomationController.kt
+│   │   │   │   ├── TopicsController.kt
+│   │   │   │   ├── LogsController.kt
+│   │   │   │   ├── HistoryController.kt
+│   │   │   │   └── HealthController.kt
+│   │   │   ├── dto/                     # Request/Response DTOs
+│   │   │   │   ├── ChatDto.kt
+│   │   │   │   ├── AutomationDto.kt
+│   │   │   │   └── TopicDto.kt
+│   │   │   └── mapper/                  # Domain ↔ DTO
+│   │   │       ├── ChatMapper.kt
+│   │   │       ├── AutomationMapper.kt
+│   │   │       └── TopicMapper.kt
+│   │   ├── config/                      # Spring configuration
+│   │   └── exception/                   # Exception handling
+│   │       └── HomebrainExceptionHandler.kt
+│   └── src/test/kotlin/                 # 222 tests, 100% coverage
+│       └── com/homebrain/agent/
+│           ├── domain/                   # Unit + Property-based
+│           ├── application/              # Unit + Mockk + PBT
+│           ├── api/                      # Integration (MockMvc)
+│           └── infrastructure/           # Integration (WireMock)
 │
 ├── engine/                     # Automation Engine (Go)
 │   ├── main.go                 # Entry point
@@ -148,6 +184,10 @@ homebrain/
 │   └── *.star
 │
 └── docs/                       # Documentation
+    ├── architecture.md         # System architecture
+    ├── development.md          # This file
+    ├── automations.md          # Starlark automation guide
+    └── testing.md              # Test-driven development guide
 ```
 
 ## Embabel Agent Development
@@ -272,10 +312,24 @@ mosquitto_pub -t test/hello -m "world"
 
 ### Running Agent Tests
 
+**IMPORTANT:** This project follows Test-Driven Development (TDD). Always write tests before implementing features.
+
 ```bash
 cd agent
-./gradlew test
+
+# Run all tests (222 tests)
+gradle test --no-daemon
+
+# Run specific test class
+gradle test --tests "AutomationIdTest"
+
+# Run with verbose output
+gradle test --info
 ```
+
+**Test Coverage:** 100% coverage across domain, application, and API layers with 222 tests across 16 files.
+
+See [testing.md](testing.md) for comprehensive TDD guidelines and examples.
 
 ## Debugging
 

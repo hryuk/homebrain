@@ -1,8 +1,50 @@
 # CLAUDE.md - Project Guide for AI Assistants
 
+## Documentation First
+
+**CRITICAL:** Always update documentation after making changes to the codebase.
+
+### Documentation Update Checklist
+
+After any code change, update relevant documentation:
+
+- [ ] **CLAUDE.md** - If architecture, workflows, or development practices change
+- [ ] **README.md** - If features, quick start, or configuration changes
+- [ ] **docs/architecture.md** - If system design or component interactions change
+- [ ] **docs/development.md** - If project structure, setup steps, or dependencies change
+- [ ] **docs/testing.md** - If test patterns, examples, or guidelines change
+- [ ] **docs/automations.md** - If Starlark API or ctx functions change
+
+### When to Update Documentation
+
+| Change Type | Update |
+|-------------|--------|
+| New domain entity/value object | `CLAUDE.md` (TDD section), `docs/architecture.md` |
+| New API endpoint | `CLAUDE.md` (API endpoints), `docs/architecture.md` |
+| New use case | `CLAUDE.md` (application layer), `docs/architecture.md` |
+| New test pattern | `docs/testing.md` |
+| New ctx function for automations | `docs/automations.md`, `CLAUDE.md` |
+| New LLM tool | `CLAUDE.md` (Embabel section) |
+| Dependency change | `docs/development.md` |
+| Architecture refactoring | `CLAUDE.md`, `docs/architecture.md` |
+
+**Remember:** Good documentation is as important as good code. Future you (and other developers) will thank you.
+
+---
+
 ## Project Overview
 
 **Homebrain** is an AI-powered MQTT automation orchestrator. Users describe automations in natural language, an LLM generates Starlark code, and the system deploys it automatically with hot-reload.
+
+## Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [README.md](../README.md) | Quick start, features, example automation |
+| [docs/architecture.md](docs/architecture.md) | System design, DDD layers, data flow |
+| [docs/development.md](docs/development.md) | Local setup, project structure, dependencies |
+| [docs/testing.md](docs/testing.md) | TDD workflow, property-based testing, examples |
+| [docs/automations.md](docs/automations.md) | Starlark syntax, ctx functions, examples |
 
 ## Architecture
 
@@ -40,30 +82,46 @@
 - `internal/watcher/watcher.go` - File watcher for hot-reload
 - `internal/state/state.go` - BoltDB persistence for automation state
 
-### Agent (`/agent`) - Kotlin/Spring Boot/Embabel
+### Agent (`/agent`) - Kotlin/Spring Boot/Embabel (DDD Architecture)
 - `build.gradle.kts` - Gradle build with Embabel dependencies
 - `src/main/kotlin/com/homebrain/agent/`
   - `AgentApplication.kt` - Spring Boot entry point
-  - `controller/` - REST API controllers
-    - `ChatController.kt` - Conversational AI chat endpoint
-    - `AutomationController.kt` - CRUD operations
-    - `TopicsController.kt` - MQTT topic discovery
-    - `LogsController.kt` - Log retrieval
-    - `HistoryController.kt` - Git history
-    - `HealthController.kt` - Health check endpoint
-  - `agent/` - Embabel agents
-    - `ConversationalChatAgent.kt` - Main chat with tool support
-    - `AutomationCodeAgent.kt` - Code generation pipeline
-  - `tools/` - LLM tools
-    - `MqttTools.kt` - Smart home query tools (@LlmTool)
-  - `service/` - Business logic
-    - `EngineProxyService.kt` - Engine API client
-    - `GitService.kt` - Git operations with JGit
-  - `domain/` - Domain models
-    - `ChatModels.kt` - Chat response and code proposal models
-    - `CodeGenerationModels.kt` - Pipeline state models for code generation
-  - `dto/` - API DTOs
-    - `DTOs.kt` - Request/response DTOs for REST API
+  - `domain/` - Pure domain models (no framework dependencies)
+    - `automation/` - Automation aggregate
+      - `Automation.kt` - Aggregate root
+      - `AutomationId.kt`, `AutomationCode.kt` - Value objects
+      - `AutomationRepository.kt` - Repository port (interface)
+    - `topic/` - Topic entity
+      - `Topic.kt` - Entity, `TopicPath.kt` - Value object
+      - `TopicRepository.kt` - Repository port (interface)
+    - `conversation/` - Chat domain
+      - `ChatResponse.kt`, `CodeProposal.kt`, `Message.kt`
+    - `commit/` - Git commit value object
+  - `application/` - Use cases (orchestration layer)
+    - `AutomationUseCase.kt` - CRUD operations for automations
+    - `ChatUseCase.kt` - Chat conversation handling
+    - `TopicUseCase.kt` - Topic discovery
+    - `LogUseCase.kt` - Log retrieval
+  - `infrastructure/` - External adapters
+    - `persistence/` - Repository implementations
+      - `GitAutomationRepository.kt` - Git-based automation storage
+      - `EngineTopicRepository.kt` - Engine-based topic discovery
+      - `GitOperations.kt` - Low-level git operations
+    - `engine/` - Engine HTTP client
+      - `EngineClient.kt` - REST client for Go engine
+    - `ai/` - LLM integration
+      - `EmbabelChatAgent.kt` - Embabel agent wrapper
+      - `MqttLlmTools.kt` - LLM-callable tools
+    - `websocket/` - Real-time communication
+      - `LogsWebSocketHandler.kt` - Log streaming
+  - `api/` - Inbound adapters (HTTP layer)
+    - `rest/` - REST controllers
+      - `ChatController.kt`, `AutomationController.kt`, etc.
+    - `dto/` - Request/response DTOs
+      - `ChatDto.kt`, `AutomationDto.kt`, `TopicDto.kt`
+    - `mapper/` - Domain to DTO mappers
+  - `config/` - Spring configuration
+  - `exception/` - Error handling
 
 ### Web UI (`/web`)
 - `src/App.tsx` - Main app with tab navigation
@@ -196,22 +254,286 @@ class MyTools(private val service: SomeService) {
 }
 ```
 
+## Test-Driven Development (TDD)
+
+**IMPORTANT:** This project follows TDD practices. Always write tests before implementing features.
+
+### Test Framework Stack
+
+```kotlin
+// build.gradle.kts dependencies
+testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+testImplementation("org.springframework.boot:spring-boot-starter-test")
+testImplementation("org.wiremock:wiremock-standalone:3.10.0")
+testImplementation("io.kotest:kotest-property:5.9.1")      // Property-based testing
+testImplementation("io.kotest:kotest-assertions-core:5.9.1")
+testImplementation("io.mockk:mockk:1.13.13")              // Kotlin mocking
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+cd agent && gradle test --no-daemon
+
+# Run specific test class
+gradle test --tests "AutomationIdTest"
+
+# Run with verbose output
+gradle test --info
+```
+
+### Test Coverage (222 tests across 16 files)
+
+| Layer | Coverage | Test Types |
+|-------|----------|------------|
+| Domain | 100% | Unit + Property-based |
+| Application | 100% | Unit + Mockk + Property-based |
+| API Mappers | 100% | Unit |
+| API Controllers | 100% | Integration (MockMvc) |
+| Infrastructure | Partial | Integration (WireMock) |
+
+### TDD Workflow
+
+When adding new features, follow this workflow:
+
+#### 1. Domain Layer (Write Tests First)
+
+**For value objects with validation:**
+```kotlin
+class AutomationIdTest {
+    @Test
+    fun `should reject blank id`() {
+        assertThrows<IllegalArgumentException> {
+            AutomationId("")
+        }
+    }
+    
+    // Property-based test for invariants
+    @Test
+    fun `valid IDs should round-trip through toFilename`() = runBlocking {
+        forAll(validIdArb) { idValue ->
+            val original = AutomationId(idValue)
+            val roundTripped = AutomationId.fromFilename(original.toFilename())
+            original.value == roundTripped.value
+        }
+    }
+}
+```
+
+**For entities with behavior:**
+```kotlin
+class TopicTest {
+    @Test
+    fun `should extract device name from standard topic`() {
+        val topic = Topic.fromPath("zigbee2mqtt/living_room_light/state")
+        assertEquals("living_room_light", topic.deviceName())
+    }
+}
+```
+
+#### 2. Application Layer (Write Tests First)
+
+Use Mockk for mocking dependencies:
+
+```kotlin
+class AutomationUseCaseTest {
+    private lateinit var automationRepository: AutomationRepository
+    private lateinit var useCase: AutomationUseCase
+
+    @BeforeEach
+    fun setUp() {
+        automationRepository = mockk()
+        useCase = AutomationUseCase(automationRepository, ...)
+    }
+
+    @Test
+    fun `should create automation with sanitized filename`() {
+        val code = "def on_message(t, p, ctx): pass"
+        every { automationRepository.save(any()) } returns sampleCommit
+        
+        val result = useCase.create(code, "My Cool Automation!")
+        
+        assertEquals("my_cool_automation", result.automation.id.value)
+    }
+}
+```
+
+#### 3. API Layer (Write Tests First)
+
+Use standalone MockMvc for controller tests:
+
+```kotlin
+class AutomationControllerTest {
+    private lateinit var mockMvc: MockMvc
+    private lateinit var automationUseCase: AutomationUseCase
+
+    @BeforeEach
+    fun setUp() {
+        automationUseCase = mockk()
+        val controller = AutomationController(automationUseCase, mapper)
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+            .setControllerAdvice(HomebrainExceptionHandler())
+            .build()
+    }
+
+    @Test
+    fun `should create automation and return response`() {
+        every { automationUseCase.create(...) } returns result
+
+        mockMvc.perform(
+            post("/api/automations")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.status").value("deployed"))
+    }
+}
+```
+
+#### 4. Infrastructure Layer (Write Tests First)
+
+Use WireMock for HTTP client tests:
+
+```kotlin
+class EngineClientTest {
+    private lateinit var wireMockServer: WireMockServer
+    private lateinit var engineClient: EngineClient
+
+    @BeforeEach
+    fun setUp() {
+        wireMockServer = WireMockServer(wireMockConfig().dynamicPort())
+        wireMockServer.start()
+        engineClient = EngineClient("http://localhost:${wireMockServer.port()}")
+    }
+
+    @Test
+    fun `should return topics from engine`() {
+        wireMockServer.stubFor(
+            get(urlEqualTo("/topics"))
+                .willReturn(
+                    aResponse()
+                        .withStatus(200)
+                        .withBody("""["topic1", "topic2"]""")
+                )
+        )
+
+        val topics = engineClient.getTopics()
+        assertEquals(2, topics.size)
+    }
+}
+```
+
+### Property-Based Testing
+
+Use Kotest Property for testing invariants. Ideal for:
+- Value object validation
+- Algorithms with complex logic (e.g., MQTT wildcard matching)
+- String sanitization
+- Parsing logic
+
+**Example:**
+
+```kotlin
+@Test
+fun `sanitized filename should never contain invalid characters`() = runBlocking {
+    forAll(Arb.string(0..100)) { input ->
+        val sanitized = sanitizeFilename(input)
+        sanitized.all { it in 'a'..'z' || it in '0'..'9' || it == '_' }
+    }
+}
+```
+
+**For comprehensive testing examples and guidelines, see [docs/testing.md](docs/testing.md).**
+
+### When to Use Each Test Type
+
+| Test Type | Use For | Example |
+|-----------|---------|---------|
+| **Unit** | Pure functions, simple logic | `AutomationId` validation |
+| **Property-based** | Invariants, algorithms, parsing | `TopicPath.matches()`, `sanitizeFilename()` |
+| **Integration (MockMvc)** | REST endpoints | `AutomationController` |
+| **Integration (WireMock)** | HTTP clients | `EngineClient` |
+| **Integration (Spring)** | Full context needed | Repository tests (future) |
+
+### Test Organization
+
+```
+agent/src/test/kotlin/com/homebrain/agent/
+├── domain/
+│   ├── automation/
+│   │   ├── AutomationIdTest.kt      (Unit + Property-based)
+│   │   ├── AutomationCodeTest.kt    (Unit + Property-based)
+│   │   └── AutomationTest.kt        (Unit)
+│   ├── topic/
+│   │   ├── TopicPathTest.kt         (Heavy Property-based)
+│   │   └── TopicTest.kt             (Unit)
+│   ├── conversation/
+│   │   └── MessageTest.kt           (Unit + Property-based)
+│   └── commit/
+│       └── CommitTest.kt            (Unit)
+├── application/
+│   └── AutomationUseCaseTest.kt     (Unit + Mockk + Property-based)
+├── api/
+│   ├── mapper/
+│   │   ├── AutomationMapperTest.kt  (Unit)
+│   │   ├── TopicMapperTest.kt       (Unit)
+│   │   └── ChatMapperTest.kt        (Unit)
+│   └── rest/
+│       ├── AutomationControllerTest.kt  (Integration)
+│       ├── ChatControllerTest.kt        (Integration)
+│       └── TopicsControllerTest.kt      (Integration)
+└── infrastructure/
+    └── engine/
+        └── EngineClientTest.kt      (Integration with WireMock)
+```
+
+**See [docs/testing.md](docs/testing.md) for detailed test examples, best practices, and troubleshooting.**
+
 ## Common Tasks
 
 ### Adding a new LLM tool
-1. Add method to `/agent/src/.../tools/MqttTools.kt` with `@LlmTool` annotation
-2. Include description for the LLM to understand when to use it
-3. Use `@LlmTool.Param` for parameter descriptions
+1. **Write test first** in `MqttLlmToolsTest.kt` (if it doesn't exist, create it)
+2. Add method to `/agent/src/.../infrastructure/ai/MqttLlmTools.kt` with `@LlmTool` annotation
+3. Include description for the LLM to understand when to use it
+4. Use `@LlmTool.Param` for parameter descriptions
+5. Verify test passes
 
 ### Adding a new `ctx` function for automations
-1. Add method to `/engine/internal/runner/context.go`
-2. Register in `ToStarlark()` method
-3. Update system prompt in `/agent/.../agent/AutomationCodeAgent.kt`
-4. Document in `/docs/automations.md`
+1. **Write test first** in `/engine/internal/runner/context_test.go`
+2. Add method to `/engine/internal/runner/context.go`
+3. Register in `ToStarlark()` method
+4. Update system prompt in `/agent/.../infrastructure/ai/EmbabelChatAgent.kt`
+5. **Update documentation** in `/docs/automations.md`
+6. **Update CLAUDE.md** if needed (add to ctx functions list)
+7. Verify test passes
 
 ### Adding a new API endpoint
-1. Create controller in `/agent/src/.../controller/`
-2. Add corresponding UI call in `/web/src/components/`
+1. **Write controller test first** using MockMvc (see [docs/testing.md](docs/testing.md))
+2. **Write use case test first** with Mockk (if new use case needed)
+3. **Write domain tests first** (if new domain models needed)
+4. Create use case in `/agent/src/.../application/` if business logic is needed
+5. Create controller in `/agent/src/.../api/rest/`
+6. Add DTOs in `/agent/src/.../api/dto/` and mappers in `/agent/src/.../api/mapper/`
+7. **Write mapper tests** to verify transformations
+8. Verify all tests pass
+9. Add corresponding UI call in `/web/src/components/`
+10. **Update documentation** in `CLAUDE.md` (API endpoints section) and `docs/architecture.md`
+
+### Adding a new domain entity
+1. **Write tests first** for:
+   - Value object validation (use property-based tests for invariants)
+   - Entity behavior
+   - Factory methods
+2. Create entity/value objects in `/agent/src/.../domain/<aggregate>/`
+3. Define repository interface (port) in the same package
+4. **Write repository tests** (integration tests with temp directories for git operations)
+5. Implement repository adapter in `/agent/src/.../infrastructure/persistence/`
+6. Create use case in `/agent/src/.../application/` if needed
+7. **Write use case tests** with Mockk
+8. Verify all tests pass
+9. **Update documentation** in `CLAUDE.md` and `docs/architecture.md`
 
 ### Modifying the Web UI
 - Components are in `/web/src/components/`
@@ -259,9 +581,10 @@ homebrain/
 ├── CLAUDE.md               # This file
 ├── README.md               # User documentation
 ├── docs/                   # Additional documentation
-│   ├── architecture.md
-│   ├── automations.md
-│   └── development.md
+│   ├── architecture.md     # System design & DDD architecture
+│   ├── automations.md      # Starlark automation guide
+│   ├── development.md      # Local setup & project structure
+│   └── testing.md          # TDD workflow & examples
 ├── engine/                 # Automation runtime (Go)
 │   ├── Dockerfile
 │   ├── go.mod
@@ -271,16 +594,28 @@ homebrain/
 │       ├── runner/
 │       ├── state/
 │       └── watcher/
-├── agent/                  # AI Agent service (Kotlin/Embabel)
+├── agent/                  # AI Agent service (Kotlin/Embabel/DDD)
 │   ├── Dockerfile
 │   ├── build.gradle.kts
 │   └── src/main/kotlin/com/homebrain/agent/
 │       ├── AgentApplication.kt
-│       ├── controller/
-│       ├── agent/
-│       ├── tools/
-│       ├── service/
-│       └── domain/
+│       ├── domain/           # Pure domain (no dependencies)
+│       │   ├── automation/   # Automation aggregate
+│       │   ├── topic/        # Topic entity
+│       │   ├── conversation/ # Chat domain
+│       │   └── commit/       # Commit value object
+│       ├── application/      # Use cases
+│       ├── infrastructure/   # External adapters
+│       │   ├── persistence/  # Repository implementations
+│       │   ├── engine/       # Engine HTTP client
+│       │   ├── ai/           # LLM integration
+│       │   └── websocket/    # Real-time handlers
+│       ├── api/              # Inbound HTTP adapters
+│       │   ├── rest/         # Controllers
+│       │   ├── dto/          # DTOs
+│       │   └── mapper/       # Domain-DTO mapping
+│       ├── config/           # Spring configuration
+│       └── exception/        # Error handling
 ├── web/                    # SolidJS frontend
 │   ├── Dockerfile
 │   ├── package.json
