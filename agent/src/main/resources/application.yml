@@ -4,6 +4,11 @@ server:
 spring:
   application:
     name: homebrain-agent
+  ai:
+    anthropic:
+      chat:
+        options:
+          max-tokens: 8192
 
 logging:
   level:
