@@ -18,6 +18,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
     volumes:
       - ./automations:/app/automations
+      - agent-data:/app/data
     depends_on:
       - engine
 
@@ -37,3 +38,4 @@ services:
 
 volumes:
   engine-state:
+  agent-data:

@@ -1,6 +1,8 @@
 package com.homebrain.agent.infrastructure.ai
 
 import com.embabel.agent.api.annotation.LlmTool
+import com.homebrain.agent.application.CodeEmbeddingService
+import com.homebrain.agent.domain.embedding.CodeType
 import com.homebrain.agent.domain.topic.TopicRepository
 import com.homebrain.agent.infrastructure.engine.EngineClient
 import org.springframework.stereotype.Component
@@ -14,7 +16,8 @@ import org.springframework.stereotype.Component
 @Component
 class MqttLlmTools(
     private val topicRepository: TopicRepository,
-    private val engineClient: EngineClient
+    private val engineClient: EngineClient,
+    private val embeddingService: CodeEmbeddingService
 ) {
 
     @LlmTool(description = "Get all available MQTT topics in the smart home system. Returns a list of topic strings like 'zigbee2mqtt/living_room/light', 'zigbee2mqtt/bedroom/motion_sensor', etc.")
@@ -71,6 +74,43 @@ class MqttLlmTools(
     fun getGlobalStateSchema(): Map<String, List<String>> {
         return engineClient.getGlobalStateSchema().keyPatterns
     }
+
+    @LlmTool(description = """
+        Search for existing automations and library modules that are semantically similar to a query.
+        Use this BEFORE creating new automations to check if similar functionality already exists.
+        Returns full source code of similar automations/libraries with similarity scores.
+        
+        IMPORTANT: Always call this first when the user requests new functionality.
+        If similarity > 0.7, strongly consider modifying existing code instead of creating new.
+        
+        Example queries:
+        - "turn on lights when motion detected"
+        - "debounce timer helper"
+        - "sync device state"
+        - "bedtime scene"
+    """)
+    fun searchSimilarCode(
+        @LlmTool.Param(description = "Natural language description of the functionality to search for")
+        query: String,
+        @LlmTool.Param(description = "Maximum number of results to return (default 5)")
+        topK: Int = 5
+    ): List<CodeSearchResultInfo> {
+        if (!embeddingService.isReady()) {
+            return emptyList()
+        }
+        
+        return embeddingService.search(query, topK).map { result ->
+            CodeSearchResultInfo(
+                type = when (result.type) {
+                    CodeType.AUTOMATION -> "automation"
+                    CodeType.LIBRARY -> "library"
+                },
+                name = result.name,
+                sourceCode = result.sourceCode,
+                similarity = result.similarity
+            )
+        }
+    }
 }
 
 /**
@@ -89,4 +129,14 @@ data class LibraryModuleInfo(
     val name: String,
     val description: String,
     val functions: List<String>
+)
+
+/**
+ * Information about a code search result returned by the LLM tool.
+ */
+data class CodeSearchResultInfo(
+    val type: String,          // "automation" or "library"
+    val name: String,          // e.g., "motion_light" or "timers"
+    val sourceCode: String,    // Full source code
+    val similarity: Float      // 0.0 to 1.0 (higher = more similar)
 )

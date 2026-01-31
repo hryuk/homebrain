@@ -61,6 +61,17 @@ dependencies {
     // JGit for Git operations
     implementation("org.eclipse.jgit:org.eclipse.jgit:7.1.0.202411261347-r")
 
+    // DJL (Deep Java Library) for ML inference
+    implementation("ai.djl:api:0.31.0")
+    implementation("ai.djl.huggingface:tokenizers:0.31.0")
+    
+    // ONNX Runtime engine for DJL
+    implementation("ai.djl.onnxruntime:onnxruntime-engine:0.31.0")
+    runtimeOnly("com.microsoft.onnxruntime:onnxruntime:1.19.2")
+    
+    // DuckDB for vector storage
+    implementation("org.duckdb:duckdb_jdbc:1.1.3")
+
     // Testing
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")

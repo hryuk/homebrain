@@ -76,6 +76,8 @@ After any code change, update relevant documentation:
 | Agent API | Kotlin + Spring Boot + Embabel | `/agent` |
 | Automation Engine | Go 1.23 + Starlark | `/engine` |
 | State Storage | BoltDB (embedded) | Engine container |
+| Vector Storage | DuckDB + VSS (embedded) | Agent container |
+| Code Embeddings | CodeRankEmbed-137M (ONNX) | Agent container |
 | Container Orchestration | Docker Compose | `/docker-compose.yml` |
 
 ## Key Files
@@ -110,6 +112,12 @@ After any code change, update relevant documentation:
     - `validation/` - Code validation domain
       - `ValidationResult.kt` - Validation result value object
     - `commit/` - Git commit value object
+    - `embedding/` - Code embedding domain
+      - `Embedding.kt` - Value object for embedding vectors (768-dim)
+      - `IndexedCode.kt` - Entity for indexed code
+      - `CodeSearchResult.kt` - Search result value object
+      - `CodeType.kt` - Enum: AUTOMATION, LIBRARY
+      - `EmbeddingRepository.kt` - Repository port (interface)
   - `application/` - Use cases (orchestration layer)
     - `AutomationUseCase.kt` - CRUD operations for automations
     - `ChatUseCase.kt` - Chat conversation handling
@@ -117,6 +125,8 @@ After any code change, update relevant documentation:
     - `LogUseCase.kt` - Log retrieval
     - `LibraryUseCase.kt` - Library module operations
     - `GlobalStateUseCase.kt` - Global state retrieval
+    - `CodeEmbeddingService.kt` - Code embedding and semantic search
+    - `EmbeddingSyncScheduler.kt` - Startup and periodic embedding sync
   - `infrastructure/` - External adapters
     - `persistence/` - Repository implementations
       - `GitAutomationRepository.kt` - Git-based automation storage
@@ -131,6 +141,9 @@ After any code change, update relevant documentation:
       - `PromptLoader.kt` - Loads prompts from Markdown files
     - `websocket/` - Real-time communication
       - `LogsWebSocketHandler.kt` - Log streaming
+    - `embedding/` - Code embeddings
+      - `CodeRankEmbedClient.kt` - DJL + ONNX embedding model
+      - `DuckDBVectorStore.kt` - DuckDB vector storage
   - `api/` - Inbound adapters (HTTP layer)
     - `rest/` - REST controllers
       - `ChatController.kt`, `AutomationController.kt`, `LibraryController.kt`, `GlobalStateController.kt`, etc.
@@ -346,6 +359,7 @@ class MyTools(private val service: SomeService) {
 ```
 
 **Current LLM Tools** (in `MqttLlmTools.kt`):
+- `searchSimilarCode(query, topK)` - **NEW** Semantic search for similar automations/libraries (uses CodeRankEmbed)
 - `getAllTopics()` - Get all MQTT topics
 - `searchTopics(pattern)` - Search topics by keyword
 - `getAutomations()` - List existing automations

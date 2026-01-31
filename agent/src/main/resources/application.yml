@@ -29,3 +29,16 @@ app:
     path: ${AUTOMATIONS_PATH:/app/automations}
   llm:
     max-tokens: ${LLM_MAX_TOKENS:8192}
+  embeddings:
+    # Path to the CodeRankEmbed ONNX model
+    model-path: ${EMBEDDINGS_MODEL_PATH:/app/models/coderank-embed}
+    # Path to the DuckDB database for vector storage
+    db-path: ${EMBEDDINGS_DB_PATH:/app/data/embeddings.duckdb}
+    # Embedding dimension (768 for CodeRankEmbed)
+    dimension: 768
+    # Maximum token length for embedding (8192 for CodeRankEmbed)
+    max-length: 8192
+    # Sync interval in milliseconds (5 minutes)
+    sync-interval: ${EMBEDDINGS_SYNC_INTERVAL:300000}
+    # Similarity threshold for recommending modification vs new code
+    similarity-threshold: 0.7
