@@ -8,7 +8,7 @@ plugins {
 group = "com.homebrain"
 version = "0.0.1-SNAPSHOT"
 
-val embabelVersion = "0.3.2"
+val embabelVersion = "0.3.4-SNAPSHOT"
 
 java {
     toolchain {

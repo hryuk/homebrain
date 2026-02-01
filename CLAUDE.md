@@ -109,6 +109,15 @@ After any code change, update relevant documentation:
       - `GlobalStateSchema.kt` - State ownership tracking
     - `conversation/` - Chat domain
       - `ChatResponse.kt`, `CodeProposal.kt`, `FileProposal.kt`, `Message.kt`
+    - `planning/` - GOAP planning domain (NEW)
+      - `UserInput.kt` - Entry point for GOAP planning
+      - `ParsedIntent.kt` - Intent classification result
+      - `AutomationRequirements.kt` - Extracted requirements
+      - `GatheredContext.kt` - Topics and similar code context
+      - `GeneratedCode.kt` - Code with attempt tracking
+      - `ValidationFailure.kt` - Validation errors for GOAP conditions
+      - `ConversationalAnswer.kt` - For question/chat responses
+      - `AutomationResponse.kt` - Final goal output
     - `validation/` - Code validation domain
       - `ValidationResult.kt` - Validation result value object
     - `commit/` - Git commit value object
@@ -135,8 +144,7 @@ After any code change, update relevant documentation:
     - `engine/` - Engine HTTP client
       - `EngineClient.kt` - REST client for Go engine
     - `ai/` - LLM integration
-      - `EmbabelChatAgent.kt` - Embabel agent wrapper
-      - `CodeFixerAgent.kt` - Fixes Starlark validation errors
+      - `HomebrainAgent.kt` - GOAP-based smart home automation agent
       - `MqttLlmTools.kt` - LLM-callable tools
       - `PromptLoader.kt` - Loads prompts from Markdown files
     - `websocket/` - Real-time communication
@@ -428,17 +436,44 @@ config = {
 }
 ```
 
-### Code Validation and Fixing
+### GOAP-Based Code Generation and Validation
 
-Generated Starlark code is automatically validated against the engine before being shown to the user. If validation fails, a dedicated `CodeFixerAgent` attempts to fix the errors (up to 3 times). If all attempts fail, the user receives a helpful message suggesting they clarify their requirements.
+The agent uses Embabel's Goal Oriented Action Planning (GOAP) for intelligent automation. Instead of hardcoded orchestration, actions declare their preconditions and effects, and the GOAP planner automatically sequences them.
 
-**Validation Flow:**
-1. LLM generates code via `EmbabelChatAgent`
-2. `ChatUseCase` validates each file via `EngineClient.validateCode()`
-3. If invalid, `CodeFixerAgent` attempts to fix using error context
-4. Fixed code is re-validated
-5. Loop until valid or max attempts (3) reached
-6. Return validated code or failure message
+**GOAP Actions in `HomebrainAgent`:**
+
+| Action | Description | Preconditions | Effects |
+|--------|-------------|---------------|---------|
+| `parseIntent` | Classify user message | UserInput | ParsedIntent |
+| `extractRequirements` | Extract automation details | ParsedIntent (AUTOMATION_REQUEST) | AutomationRequirements |
+| `gatherContext` | Gather topics + similar code | AutomationRequirements | GatheredContext |
+| `generateCode` | Generate Starlark code | AutomationRequirements, GatheredContext | GeneratedCode |
+| `validateCode` | Validate against engine | GeneratedCode | Sets CODE_IS_VALID or CODE_IS_INVALID |
+| `fixInvalidCode` | Fix validation errors | CODE_IS_INVALID, CAN_STILL_RETRY | GeneratedCode (attempt++) |
+| `answerQuestion` | Answer questions | ParsedIntent (QUESTION/CHAT) | ConversationalAnswer |
+| `respondWithAutomation` | **Goal**: Return valid code | CODE_IS_VALID | AutomationResponse |
+| `respondWithFailure` | **Goal**: Max retries hit | MAX_RETRIES_EXHAUSTED | AutomationResponse |
+| `respondConversationally` | **Goal**: Answer question | ConversationalAnswer | AutomationResponse |
+
+**Conditions:**
+- `CODE_IS_VALID` - No validation failures in blackboard
+- `CODE_IS_INVALID` - Validation failures exist
+- `CAN_STILL_RETRY` - Attempt count < maxFixAttempts (configurable, default 3)
+- `MAX_RETRIES_EXHAUSTED` - Attempt count >= maxFixAttempts
+
+**Example GOAP Plan (automation request):**
+```
+UserInput → parseIntent → extractRequirements → gatherContext → generateCode 
+→ validateCode [CODE_IS_INVALID] → fixInvalidCode → validateCode [CODE_IS_VALID]
+→ respondWithAutomation (GOAL)
+```
+
+**Configuration** (in `application.yml`):
+```yaml
+homebrain:
+  agent:
+    max-fix-attempts: 3
+```
 
 ### Prompt Management
 
