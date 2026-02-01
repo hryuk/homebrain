@@ -14,6 +14,7 @@ export default function LibraryViewer() {
   const [selectedModule, setSelectedModule] = createSignal<string | null>(null)
   const [selectedCode, setSelectedCode] = createSignal<string>('')
   const [loadingCode, setLoadingCode] = createSignal(false)
+  const [deleting, setDeleting] = createSignal(false)
 
   const fetchModules = async () => {
     try {
@@ -42,6 +43,27 @@ export default function LibraryViewer() {
       console.error('Failed to fetch module code:', error)
     } finally {
       setLoadingCode(false)
+    }
+  }
+
+  const deleteModule = async (name: string) => {
+    if (!confirm(`Are you sure you want to delete the library "${name}"?`)) return
+
+    setDeleting(true)
+    try {
+      const response = await fetch(`/api/libraries/${name}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        setSelectedModule(null)
+        setSelectedCode('')
+        fetchModules()
+      }
+    } catch (error) {
+      console.error('Failed to delete library:', error)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -95,6 +117,18 @@ export default function LibraryViewer() {
 
       <div class="detail-panel">
         <Show when={selectedModule()}>
+          <div class="panel-header">
+            <h2>{selectedModule()}.lib.star</h2>
+            <div class="actions">
+              <button
+                onClick={() => deleteModule(selectedModule()!)}
+                class="delete-btn"
+                disabled={deleting()}
+              >
+                {deleting() ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
           <Show when={loadingCode()}>
             <div class="loading">Loading code...</div>
           </Show>

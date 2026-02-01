@@ -1,7 +1,9 @@
 package com.homebrain.agent.api.mapper
 
+import com.homebrain.agent.api.dto.CommitInfoDto
 import com.homebrain.agent.api.dto.LibraryCodeDto
 import com.homebrain.agent.api.dto.LibraryModuleDto
+import com.homebrain.agent.domain.commit.Commit
 import com.homebrain.agent.domain.library.LibraryModule
 import org.springframework.stereotype.Component
 
@@ -27,6 +29,15 @@ class LibraryMapper {
         return LibraryCodeDto(
             name = moduleName,
             code = code
+        )
+    }
+
+    fun toCommitDto(commit: Commit): CommitInfoDto {
+        return CommitInfoDto(
+            hash = commit.hash,
+            message = commit.message,
+            author = commit.author,
+            date = commit.timestamp
         )
     }
 }

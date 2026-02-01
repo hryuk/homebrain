@@ -115,6 +115,8 @@ After any code change, update relevant documentation:
       - `AutomationRequirements.kt` - Extracted requirements
       - `GatheredContext.kt` - Topics and similar code context
       - `GeneratedCode.kt` - Code with attempt tracking
+      - `ExtractedCode.kt` - Code after library extraction (forces GOAP sequencing)
+      - `ValidatedCode.kt` - Code after validation (forces GOAP sequencing)
       - `ValidationFailure.kt` - Validation errors for GOAP conditions
       - `ConversationalAnswer.kt` - For question/chat responses
       - `AutomationResponse.kt` - Final goal output
@@ -132,10 +134,10 @@ After any code change, update relevant documentation:
     - `ChatUseCase.kt` - Chat conversation handling
     - `TopicUseCase.kt` - Topic discovery
     - `LogUseCase.kt` - Log retrieval
-    - `LibraryUseCase.kt` - Library module operations
+    - `LibraryUseCase.kt` - Library module operations (list, get, delete)
     - `GlobalStateUseCase.kt` - Global state retrieval
-    - `CodeEmbeddingService.kt` - Code embedding and semantic search
-    - `EmbeddingSyncScheduler.kt` - Startup and periodic embedding sync
+    - `CodeEmbeddingService.kt` - Code embedding and semantic search (async updates on CRUD)
+    - `EmbeddingSyncScheduler.kt` - Startup and periodic embedding sync (fallback)
   - `infrastructure/` - External adapters
     - `persistence/` - Repository implementations
       - `GitAutomationRepository.kt` - Git-based automation storage
@@ -207,6 +209,7 @@ cd web && npm run dev
 | GET | `/api/topics` | List discovered MQTT topics |
 | GET | `/api/libraries` | List library modules with functions |
 | GET | `/api/libraries/{name}` | Get library module source code |
+| DELETE | `/api/libraries/{name}` | Delete library module |
 | GET | `/api/global-state` | Get global state values with ownership |
 | GET | `/api/logs` | Get recent logs |
 | GET | `/api/history` | Git commit history |
@@ -377,12 +380,18 @@ class MyTools(private val service: SomeService) {
 
 ### Library-First Code Generation
 
-The LLM is configured to favor creating reusable library functions. When users request automations involving:
+The agent enforces library-first code generation through two mechanisms:
+
+1. **System prompt guidance** (`chat-system-prompt.md`) - Instructs the LLM to create library functions for reusable patterns
+2. **Automatic extraction** (`extractToLibrary` action) - Analyzes generated code and extracts reusable logic to libraries
+
+**Patterns that get extracted to libraries:**
 - **Generic device operations** (blink, fade, pulse, toggle sequences)
 - **State management patterns** (history tracking, aggregation, state machines)
 - **Multi-device coordination** (scenes, sequences, group operations)
+- **Inlined reusable logic** (loops, device iterations, even if not in separate functions)
 
-The LLM will propose both a library function and the automation that uses it, deployed together atomically.
+The extraction action uses `getLibraryModules()` and `getLibraryCode()` tools to check existing libraries and extends them rather than creating duplicates.
 
 **Code Proposal Format:**
 ```json
@@ -394,8 +403,6 @@ The LLM will propose both a library function and the automation that uses it, de
   ]
 }
 ```
-
-The system prompt is stored in `resources/prompts/chat-system-prompt.md` and contains explicit criteria for when to extract logic into libraries vs inline it.
 
 ### Device State Synchronization
 
@@ -442,17 +449,18 @@ The agent uses Embabel's Goal Oriented Action Planning (GOAP) for intelligent au
 
 **GOAP Actions in `HomebrainAgent`:**
 
-| Action | Description | Preconditions | Effects |
-|--------|-------------|---------------|---------|
+| Action | Description | Input | Output |
+|--------|-------------|-------|--------|
 | `parseIntent` | Classify user message | UserInput | ParsedIntent |
 | `extractRequirements` | Extract automation details | ParsedIntent (AUTOMATION_REQUEST) | AutomationRequirements |
 | `gatherContext` | Gather topics + similar code | AutomationRequirements | GatheredContext |
 | `generateCode` | Generate Starlark code | AutomationRequirements, GatheredContext | GeneratedCode |
-| `validateCode` | Validate against engine | GeneratedCode | Sets CODE_IS_VALID or CODE_IS_INVALID |
-| `fixInvalidCode` | Fix validation errors | CODE_IS_INVALID, CAN_STILL_RETRY | GeneratedCode (attempt++) |
+| `extractToLibrary` | Extract reusable logic to library modules | GeneratedCode | ExtractedCode |
+| `validateCode` | Validate against engine | ExtractedCode | ValidatedCode + CODE_IS_VALID/INVALID |
+| `fixInvalidCode` | Fix validation errors | ValidatedCode + CODE_IS_INVALID | ExtractedCode (attempt++) |
 | `answerQuestion` | Answer questions | ParsedIntent (QUESTION/CHAT) | ConversationalAnswer |
-| `respondWithAutomation` | **Goal**: Return valid code | CODE_IS_VALID | AutomationResponse |
-| `respondWithFailure` | **Goal**: Max retries hit | MAX_RETRIES_EXHAUSTED | AutomationResponse |
+| `respondWithAutomation` | **Goal**: Return valid code | ValidatedCode + CODE_IS_VALID | AutomationResponse |
+| `respondWithFailure` | **Goal**: Max retries hit | ValidatedCode + MAX_RETRIES_EXHAUSTED | AutomationResponse |
 | `respondConversationally` | **Goal**: Answer question | ConversationalAnswer | AutomationResponse |
 
 **Conditions:**
@@ -464,8 +472,8 @@ The agent uses Embabel's Goal Oriented Action Planning (GOAP) for intelligent au
 **Example GOAP Plan (automation request):**
 ```
 UserInput → parseIntent → extractRequirements → gatherContext → generateCode 
-→ validateCode [CODE_IS_INVALID] → fixInvalidCode → validateCode [CODE_IS_VALID]
-→ respondWithAutomation (GOAL)
+→ extractToLibrary → validateCode [CODE_IS_INVALID] → fixInvalidCode 
+→ validateCode [CODE_IS_VALID] → respondWithAutomation (GOAL)
 ```
 
 **Configuration** (in `application.yml`):
@@ -483,6 +491,7 @@ Prompts are stored as Markdown files in `agent/src/main/resources/prompts/` for 
 |------|---------|
 | `chat-system-prompt.md` | Main system prompt for the chat agent |
 | `code-fixer-prompt.md` | System prompt for fixing Starlark validation errors |
+| `library-extractor-prompt.md` | System prompt for extracting reusable logic to library modules |
 
 **PromptLoader** (`infrastructure/ai/PromptLoader.kt`) provides:
 - Loading prompts from classpath resources
@@ -803,7 +812,7 @@ agent/src/test/kotlin/com/homebrain/agent/
 4. **Starlark limitations:** No `while` loops, no recursion, no imports - by design for safety
 5. **MQTT only:** Automations cannot make HTTP requests (sandboxed)
 6. **Git tracking:** All automations are committed to git in the shared volume
-7. **Embabel version:** Currently using 0.3.2 (0.3.3 has tool calling issues)
+7. **Embabel version:** Currently using 0.3.4-SNAPSHOT (GOAP actions need proper `post` annotations)
 
 ## Debugging
 

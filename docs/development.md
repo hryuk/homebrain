@@ -388,7 +388,7 @@ docker compose logs -f
 Key dependencies in `build.gradle.kts`:
 
 ```kotlin
-val embabelVersion = "0.3.2"
+val embabelVersion = "0.3.4-SNAPSHOT"
 
 dependencies {
     // Embabel Agent Framework

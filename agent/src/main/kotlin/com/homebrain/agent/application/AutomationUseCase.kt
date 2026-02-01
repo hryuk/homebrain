@@ -65,7 +65,8 @@ data class MultiDeployResult(
 class AutomationUseCase(
     private val automationRepository: AutomationRepository,
     private val engineClient: EngineClient,
-    private val gitOperations: GitOperations
+    private val gitOperations: GitOperations,
+    private val codeEmbeddingService: CodeEmbeddingService
 ) {
 
     /**
@@ -82,6 +83,10 @@ class AutomationUseCase(
         logger.info { "Creating automation: ${automation.toFilename()}" }
         
         val commit = automationRepository.save(automation)
+        
+        // Async: update embeddings
+        codeEmbeddingService.indexAutomation(automation.id.value, code)
+        
         return AutomationResult(
             automation = automation.withCommit(commit),
             commit = commit,
@@ -109,6 +114,10 @@ class AutomationUseCase(
         logger.info { "Updating automation: ${automation.toFilename()}" }
         
         val commit = automationRepository.save(automation)
+        
+        // Async: update embeddings
+        codeEmbeddingService.indexAutomation(id, code)
+        
         return AutomationResult(
             automation = automation.withCommit(commit),
             commit = commit,
@@ -145,7 +154,12 @@ class AutomationUseCase(
         
         logger.info { "Deleting automation: ${automationId.toFilename()}" }
         
-        return automationRepository.delete(automationId)
+        val commit = automationRepository.delete(automationId)
+        
+        // Async: update embeddings
+        codeEmbeddingService.removeAutomation(id)
+        
+        return commit
     }
 
     /**
@@ -200,10 +214,30 @@ class AutomationUseCase(
         val commitMessage = buildCommitMessage(deployedFiles)
         val commit = gitOperations.commit(commitMessage)
         
+        // Async: update embeddings for each deployed file
+        sortedFiles.forEach { file ->
+            val name = extractNameFromFilename(file.filename)
+            if (file.isLibrary()) {
+                codeEmbeddingService.indexLibrary(name, file.code)
+            } else {
+                codeEmbeddingService.indexAutomation(name, file.code)
+            }
+        }
+        
         return MultiDeployResult(
             deployedFiles = deployedFiles,
             commit = commit
         )
+    }
+    
+    /**
+     * Extract the name from a filename (without path and extension).
+     */
+    private fun extractNameFromFilename(filename: String): String {
+        return filename
+            .substringAfterLast("/")
+            .removeSuffix(".lib.star")
+            .removeSuffix(".star")
     }
 
     private fun buildCommitMessage(files: List<DeployedFile>): String {

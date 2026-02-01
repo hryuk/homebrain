@@ -3,6 +3,7 @@ package com.homebrain.agent.api.rest
 import com.homebrain.agent.api.mapper.LibraryMapper
 import com.homebrain.agent.application.LibraryModuleNotFoundException
 import com.homebrain.agent.application.LibraryUseCase
+import com.homebrain.agent.domain.commit.Commit
 import com.homebrain.agent.domain.library.LibraryModule
 import com.homebrain.agent.exception.HomebrainExceptionHandler
 import io.mockk.every
@@ -12,9 +13,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import java.time.Instant
 
 class LibraryControllerTest {
 
@@ -117,6 +120,50 @@ class LibraryControllerTest {
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.name").value("my_utils_v2"))
                 .andExpect(jsonPath("$.code").value(code))
+        }
+    }
+
+    @Nested
+    inner class DeleteModule {
+        private val sampleCommit = Commit(
+            hash = "abc123def",
+            message = "Delete library: lib/timers.lib.star",
+            author = "homebrain",
+            timestamp = Instant.now()
+        )
+
+        @Test
+        fun `should delete library module and return commit info`() {
+            every { libraryUseCase.delete("timers") } returns sampleCommit
+
+            mockMvc.perform(delete("/api/libraries/timers"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.hash").value("abc123def"))
+                .andExpect(jsonPath("$.message").value("Delete library: lib/timers.lib.star"))
+                .andExpect(jsonPath("$.author").value("homebrain"))
+
+            verify { libraryUseCase.delete("timers") }
+        }
+
+        @Test
+        fun `should return 404 when module not found`() {
+            every { libraryUseCase.delete("nonexistent") } throws
+                LibraryModuleNotFoundException("nonexistent")
+
+            mockMvc.perform(delete("/api/libraries/nonexistent"))
+                .andExpect(status().isNotFound)
+                .andExpect(jsonPath("$.error").value("not_found"))
+        }
+
+        @Test
+        fun `should handle module name with underscores`() {
+            every { libraryUseCase.delete("my_utils_v2") } returns sampleCommit
+
+            mockMvc.perform(delete("/api/libraries/my_utils_v2"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.hash").value("abc123def"))
+
+            verify { libraryUseCase.delete("my_utils_v2") }
         }
     }
 }

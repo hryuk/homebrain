@@ -25,6 +25,7 @@ class AutomationUseCaseTest {
     private lateinit var automationRepository: AutomationRepository
     private lateinit var engineClient: EngineClient
     private lateinit var gitOperations: GitOperations
+    private lateinit var codeEmbeddingService: CodeEmbeddingService
     private lateinit var useCase: AutomationUseCase
 
     private val sampleCommit = Commit(
@@ -39,7 +40,8 @@ class AutomationUseCaseTest {
         automationRepository = mockk()
         engineClient = mockk()
         gitOperations = mockk()
-        useCase = AutomationUseCase(automationRepository, engineClient, gitOperations)
+        codeEmbeddingService = mockk(relaxed = true)
+        useCase = AutomationUseCase(automationRepository, engineClient, gitOperations, codeEmbeddingService)
     }
 
     @Nested
@@ -78,6 +80,17 @@ class AutomationUseCaseTest {
             
             assertEquals("test", result.automation.id.value)
         }
+
+        @Test
+        fun `should trigger embedding indexing after create`() {
+            val code = "def on_message(t, p, ctx): pass"
+            
+            every { automationRepository.save(any()) } returns sampleCommit
+            
+            useCase.create(code, "my_automation")
+            
+            verify { codeEmbeddingService.indexAutomation("my_automation", code) }
+        }
     }
 
     @Nested
@@ -103,6 +116,18 @@ class AutomationUseCaseTest {
             assertThrows<AutomationNotFoundException> {
                 useCase.update("nonexistent", "code")
             }
+        }
+
+        @Test
+        fun `should trigger embedding indexing after update`() {
+            val code = "def on_schedule(ctx): pass"
+            
+            every { automationRepository.exists(AutomationId("test")) } returns true
+            every { automationRepository.save(any()) } returns sampleCommit
+            
+            useCase.update("test", code)
+            
+            verify { codeEmbeddingService.indexAutomation("test", code) }
         }
     }
 
@@ -151,6 +176,16 @@ class AutomationUseCaseTest {
             assertThrows<AutomationNotFoundException> {
                 useCase.delete("missing")
             }
+        }
+
+        @Test
+        fun `should trigger embedding removal after delete`() {
+            every { automationRepository.exists(AutomationId("test")) } returns true
+            every { automationRepository.delete(AutomationId("test")) } returns sampleCommit
+            
+            useCase.delete("test")
+            
+            verify { codeEmbeddingService.removeAutomation("test") }
         }
     }
 
@@ -430,6 +465,60 @@ class AutomationUseCaseTest {
             val result = useCase.deployMultiple(files)
             
             assertFalse(result.deployedFiles[0].isNew)
+        }
+
+        @Test
+        fun `should trigger embedding indexing for automation after deploy`() {
+            val automationCode = "def on_message(t,p,c): pass"
+            val files = listOf(
+                FileDeployment(automationCode, "test_automation.star", FileDeployment.FileType.AUTOMATION)
+            )
+            
+            every { gitOperations.fileExists(any()) } returns false
+            every { gitOperations.writeFile(any(), any()) } just runs
+            every { gitOperations.stageFile(any()) } just runs
+            every { gitOperations.commit(any()) } returns sampleCommit
+            
+            useCase.deployMultiple(files)
+            
+            verify { codeEmbeddingService.indexAutomation("test_automation", automationCode) }
+        }
+
+        @Test
+        fun `should trigger embedding indexing for library after deploy`() {
+            val libraryCode = "def helper(): pass"
+            val files = listOf(
+                FileDeployment(libraryCode, "lib/utils.lib.star", FileDeployment.FileType.LIBRARY)
+            )
+            
+            every { gitOperations.fileExists(any()) } returns false
+            every { gitOperations.writeFile(any(), any()) } just runs
+            every { gitOperations.stageFile(any()) } just runs
+            every { gitOperations.commit(any()) } returns sampleCommit
+            
+            useCase.deployMultiple(files)
+            
+            verify { codeEmbeddingService.indexLibrary("utils", libraryCode) }
+        }
+
+        @Test
+        fun `should trigger embedding indexing for both library and automation`() {
+            val libraryCode = "def blink(ctx): pass"
+            val automationCode = "def on_message(t,p,c): ctx.lib.lights.blink(c)"
+            val files = listOf(
+                FileDeployment(libraryCode, "lib/lights.lib.star", FileDeployment.FileType.LIBRARY),
+                FileDeployment(automationCode, "blink_light.star", FileDeployment.FileType.AUTOMATION)
+            )
+            
+            every { gitOperations.fileExists(any()) } returns false
+            every { gitOperations.writeFile(any(), any()) } just runs
+            every { gitOperations.stageFile(any()) } just runs
+            every { gitOperations.commit(any()) } returns sampleCommit
+            
+            useCase.deployMultiple(files)
+            
+            verify { codeEmbeddingService.indexLibrary("lights", libraryCode) }
+            verify { codeEmbeddingService.indexAutomation("blink_light", automationCode) }
         }
     }
 }

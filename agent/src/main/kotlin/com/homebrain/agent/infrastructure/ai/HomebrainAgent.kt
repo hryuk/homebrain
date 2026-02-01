@@ -12,7 +12,18 @@ import com.homebrain.agent.application.CodeEmbeddingService
 import com.homebrain.agent.config.HomebrainAgentConfig
 import com.homebrain.agent.domain.conversation.CodeProposal
 import com.homebrain.agent.domain.conversation.FileProposal
-import com.homebrain.agent.domain.planning.*
+import com.homebrain.agent.domain.planning.AutomationRequirements
+import com.homebrain.agent.domain.planning.AutomationResponse
+import com.homebrain.agent.domain.planning.ConversationalAnswer
+import com.homebrain.agent.domain.planning.ExtractedCode
+import com.homebrain.agent.domain.planning.ExtractionResponse
+import com.homebrain.agent.domain.planning.GatheredContext
+import com.homebrain.agent.domain.planning.GeneratedCode
+import com.homebrain.agent.domain.planning.GeneratedCodeResponse
+import com.homebrain.agent.domain.planning.ParsedIntent
+import com.homebrain.agent.domain.planning.UserInput
+import com.homebrain.agent.domain.planning.ValidatedCode
+import com.homebrain.agent.domain.planning.ValidationFailure
 import com.homebrain.agent.infrastructure.engine.EngineClient
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Component
@@ -24,10 +35,12 @@ private val logger = KotlinLogging.logger {}
  * 
  * This agent uses Embabel's Goal Oriented Action Planning to:
  * 1. Parse user intent
- * 2. Gather context (topics, similar code)
- * 3. Generate automation code
- * 4. Validate and fix code in a loop
- * 5. Respond with validated code or conversational answer
+ * 2. Extract automation requirements
+ * 3. Gather context (topics, similar code, libraries)
+ * 4. Generate automation code
+ * 5. Extract reusable helper functions to library modules
+ * 6. Validate and fix code in a loop
+ * 7. Respond with validated code or conversational answer
  * 
  * The GOAP planner automatically sequences actions based on type dependencies
  * and replans when conditions change (e.g., validation fails).
@@ -47,13 +60,18 @@ class HomebrainAgent(
         const val CODE_IS_INVALID = "codeIsInvalid"
         const val CAN_STILL_RETRY = "canStillRetry"
         const val MAX_RETRIES_EXHAUSTED = "maxRetriesExhausted"
+        const val IS_QUESTION_OR_CHAT = "isQuestionOrChat"
+        const val IS_AUTOMATION_REQUEST = "isAutomationRequest"
     }
 
     // ============================================================================
     // PHASE 1: INTENT PARSING
     // ============================================================================
 
-    @Action(description = "Parse user message to classify intent as automation request, question, or chat")
+    @Action(
+        description = "Parse user message to classify intent as automation request, question, or chat",
+        post = [IS_AUTOMATION_REQUEST, IS_QUESTION_OR_CHAT]
+    )
     fun parseIntent(userInput: UserInput, context: OperationContext): ParsedIntent {
         logger.info { "Parsing intent for: ${userInput.message.take(50)}..." }
         
@@ -312,7 +330,114 @@ config = {
     }
 
     // ============================================================================
-    // PHASE 5: VALIDATION
+    // PHASE 5: LIBRARY EXTRACTION
+    // ============================================================================
+
+    @Action(description = "Extract reusable logic (helper functions and inlined patterns) from automation code into library modules")
+    fun extractToLibrary(
+        generatedCode: GeneratedCode,
+        context: OperationContext
+    ): ExtractedCode {
+        logger.info { "Analyzing code for library extraction - looking for reusable logic (${generatedCode.files.size} files)" }
+
+        val extractionPrompt = promptLoader.load("library-extractor-prompt.md")
+
+        // Prepare automation files for analysis
+        val automationFiles = generatedCode.files.filter { it.isAutomation() }
+        
+        if (automationFiles.isEmpty()) {
+            logger.debug { "No automation files to analyze for extraction" }
+            return ExtractedCode.noExtraction(generatedCode, "No automation files to analyze")
+        }
+
+        val userPrompt = buildString {
+            appendLine("Extract reusable logic from this automation code to library modules.")
+            appendLine()
+            generatedCode.files.forEach { file ->
+                appendLine("## ${file.filename}")
+                appendLine("```python")
+                appendLine(file.code)
+                appendLine("```")
+                appendLine()
+            }
+        }
+
+        val textResponse = context.ai()
+            .withDefaultLlm()
+            .withSystemPrompt(extractionPrompt)
+            .withToolObject(mqttLlmTools)
+            .createObject(userPrompt, String::class.java)
+
+        logger.debug { "Extraction response: ${textResponse.take(500)}..." }
+
+        val extractionResult = parseExtractionResponse(textResponse)
+        
+        if (!extractionResult.extracted) {
+            logger.info { "No extraction needed - no reusable logic patterns found" }
+            return ExtractedCode.noExtraction(generatedCode, extractionResult.summary)
+        }
+
+        logger.info { "Extraction performed: ${extractionResult.summary}" }
+
+        val extractedFiles = extractionResult.files.map { file ->
+            FileProposal(
+                code = file.code,
+                filename = file.filename,
+                type = FileProposal.FileType.fromString(file.type)
+            )
+        }
+
+        return ExtractedCode.withExtraction(
+            files = extractedFiles,
+            originalSummary = generatedCode.summary,
+            attempt = generatedCode.attempt,
+            extractionSummary = extractionResult.summary
+        )
+    }
+
+    /**
+     * Parse the extraction response from the LLM.
+     */
+    private fun parseExtractionResponse(text: String): ExtractionResponse {
+        val objectMapper = ObjectMapper().apply {
+            findAndRegisterModules()
+        }
+
+        // Try to find JSON in the response
+        val jsonPatterns = listOf(
+            // Direct JSON object
+            Regex("""(?s)\{.*"extracted".*"files".*\}"""),
+            // JSON in markdown code block
+            Regex("""(?s)```(?:json)?\s*(\{.*"extracted".*"files".*\})\s*```"""),
+        )
+
+        for (pattern in jsonPatterns) {
+            val match = pattern.find(text)
+            if (match != null) {
+                val jsonStr = if (match.groups.size > 1 && match.groups[1] != null) {
+                    match.groups[1]!!.value
+                } else {
+                    match.value
+                }
+                try {
+                    return objectMapper.readValue<ExtractionResponse>(jsonStr)
+                } catch (e: Exception) {
+                    logger.warn { "Failed to parse extraction JSON match: ${e.message}" }
+                }
+            }
+        }
+
+        // Last resort: try to parse the whole text
+        return try {
+            objectMapper.readValue<ExtractionResponse>(text.trim())
+        } catch (e: Exception) {
+            logger.warn { "Failed to parse extraction response, returning no extraction: ${e.message}" }
+            ExtractionResponse(extracted = false, summary = "Parse error", files = emptyList())
+        }
+    }
+
+    // ============================================================================
+    // PHASE 6: VALIDATION
     // ============================================================================
 
     @Action(
@@ -320,14 +445,14 @@ config = {
         post = [CODE_IS_VALID, CODE_IS_INVALID]
     )
     fun validateCode(
-        generatedCode: GeneratedCode,
+        extractedCode: ExtractedCode,
         context: OperationContext
-    ): GeneratedCode {
-        logger.info { "Validating code (attempt ${generatedCode.attempt})" }
+    ): ValidatedCode {
+        logger.info { "Validating code (attempt ${extractedCode.attempt}, extraction=${extractedCode.extractionPerformed})" }
 
         val failures = mutableListOf<ValidationFailure>()
 
-        for (file in generatedCode.files) {
+        for (file in extractedCode.files) {
             val type = when (file.type) {
                 FileProposal.FileType.AUTOMATION -> "automation"
                 FileProposal.FileType.LIBRARY -> "library"
@@ -345,17 +470,25 @@ config = {
         }
 
         if (failures.isEmpty()) {
-            logger.info { "All ${generatedCode.files.size} files passed validation" }
+            logger.info { "All ${extractedCode.files.size} files passed validation" }
         } else {
             logger.info { "${failures.size} file(s) failed validation" }
         }
 
-        return generatedCode
+        // Explicitly add to context so codeIsValid condition can find it
+        // (return value alone may not be on blackboard in time for condition evaluation)
+        val validatedCode = ValidatedCode.fromExtractedCode(extractedCode)
+        context += validatedCode
+        return validatedCode
     }
 
     @Condition(name = CODE_IS_VALID)
     fun codeIsValid(context: OperationContext): Boolean {
-        return context.objectsOfType(ValidationFailure::class.java).isEmpty()
+        // Must have ValidatedCode AND no validation failures
+        // This prevents GOAP from skipping validation entirely
+        val hasValidatedCode = context.objectsOfType(ValidatedCode::class.java).isNotEmpty()
+        val noValidationFailures = context.objectsOfType(ValidationFailure::class.java).isEmpty()
+        return hasValidatedCode && noValidationFailures
     }
 
     @Condition(name = CODE_IS_INVALID)
@@ -364,23 +497,22 @@ config = {
     }
 
     // ============================================================================
-    // PHASE 6: CODE FIXING
+    // PHASE 7: CODE FIXING
     // ============================================================================
 
     @Action(
         description = "Fix Starlark validation errors using LLM",
         pre = [CODE_IS_INVALID, CAN_STILL_RETRY],
-        post = [CODE_IS_VALID, CODE_IS_INVALID],
         canRerun = true
     )
     fun fixInvalidCode(
-        generatedCode: GeneratedCode,
+        validatedCode: ValidatedCode,
         context: OperationContext
-    ): GeneratedCode {
+    ): ExtractedCode {
         val failures = context.objectsOfType(ValidationFailure::class.java)
-        logger.info { "Fixing ${failures.size} invalid file(s) (attempt ${generatedCode.attempt + 1})" }
+        logger.info { "Fixing ${failures.size} invalid file(s) (attempt ${validatedCode.attempt + 1})" }
 
-        val fixedFiles = generatedCode.files.map { file ->
+        val fixedFiles = validatedCode.files.map { file ->
             val failure = failures.find { it.file.filename == file.filename }
             if (failure != null) {
                 fixFile(file, failure.errors, context)
@@ -389,10 +521,13 @@ config = {
             }
         }
 
-        return GeneratedCode(
+        // Return ExtractedCode so it feeds back into validateCode
+        return ExtractedCode(
             files = fixedFiles,
-            summary = generatedCode.summary,
-            attempt = generatedCode.attempt + 1
+            summary = validatedCode.summary,
+            attempt = validatedCode.attempt + 1,
+            extractionPerformed = false,
+            extractionSummary = "From fix attempt"
         )
     }
 
@@ -426,30 +561,36 @@ config = {
     }
 
     @Condition(name = CAN_STILL_RETRY)
-    fun canStillRetry(generatedCode: GeneratedCode): Boolean {
-        return generatedCode.attempt < config.maxFixAttempts
+    fun canStillRetry(context: OperationContext): Boolean {
+        val validatedCode = context.objectsOfType(ValidatedCode::class.java).firstOrNull()
+        return validatedCode != null && validatedCode.attempt < config.maxFixAttempts
     }
 
     @Condition(name = MAX_RETRIES_EXHAUSTED)
-    fun maxRetriesExhausted(generatedCode: GeneratedCode): Boolean {
-        return generatedCode.attempt >= config.maxFixAttempts
+    fun maxRetriesExhausted(context: OperationContext): Boolean {
+        val validatedCode = context.objectsOfType(ValidatedCode::class.java).firstOrNull()
+        return validatedCode != null && validatedCode.attempt >= config.maxFixAttempts
     }
 
     // ============================================================================
-    // PHASE 7: CONVERSATIONAL ANSWER
+    // PHASE 8: CONVERSATIONAL ANSWER
     // ============================================================================
 
-    @Action(description = "Answer questions about the smart home or have a conversation")
+    @Action(
+        description = "Answer questions about the smart home or have a conversation",
+        pre = [IS_QUESTION_OR_CHAT]
+    )
     fun answerQuestion(
         userInput: UserInput,
         intent: ParsedIntent,
         context: OperationContext
     ): ConversationalAnswer? {
+        // Double-check: if we're in an automation request, return null to prevent this action
         if (intent.isAutomationRequest()) {
-            logger.debug { "Skipping question answering - this is an automation request" }
+            logger.debug { "Skipping answerQuestion - this is an automation request" }
             return null
         }
-
+        
         logger.info { "Answering ${intent.type}: ${intent.description}" }
 
         val prompt = """
@@ -470,6 +611,18 @@ config = {
         return ConversationalAnswer(response)
     }
 
+    @Condition(name = IS_QUESTION_OR_CHAT)
+    fun isQuestionOrChat(context: OperationContext): Boolean {
+        val intent = context.objectsOfType(ParsedIntent::class.java).firstOrNull()
+        return intent != null && !intent.isAutomationRequest()
+    }
+
+    @Condition(name = IS_AUTOMATION_REQUEST)
+    fun isAutomationRequest(context: OperationContext): Boolean {
+        val intent = context.objectsOfType(ParsedIntent::class.java).firstOrNull()
+        return intent != null && intent.isAutomationRequest()
+    }
+
     // ============================================================================
     // GOALS: Final response actions
     // ============================================================================
@@ -482,30 +635,30 @@ config = {
             startingInputTypes = [UserInput::class]
         )
     )
-    @Action(pre = [CODE_IS_VALID])
+    @Action(pre = [CODE_IS_VALID, IS_AUTOMATION_REQUEST])
     fun respondWithAutomation(
-        generatedCode: GeneratedCode,
+        validatedCode: ValidatedCode,
         context: OperationContext
     ): AutomationResponse {
         logger.info { "Goal achieved: responding with validated automation" }
 
         val proposal = CodeProposal(
-            summary = generatedCode.summary,
-            files = generatedCode.files
+            summary = validatedCode.summary,
+            files = validatedCode.files
         )
 
         return AutomationResponse(
-            message = "Here's your automation: ${generatedCode.summary}\n\n" +
-                "I've generated ${generatedCode.files.size} file(s). " +
+            message = "Here's your automation: ${validatedCode.summary}\n\n" +
+                "I've generated ${validatedCode.files.size} file(s). " +
                 "Click 'Deploy' to activate this automation.",
             codeProposal = proposal
         )
     }
 
     @AchievesGoal(description = "Respond when code generation failed after max retry attempts")
-    @Action(pre = [MAX_RETRIES_EXHAUSTED])
+    @Action(pre = [MAX_RETRIES_EXHAUSTED, IS_AUTOMATION_REQUEST])
     fun respondWithFailure(
-        generatedCode: GeneratedCode,
+        validatedCode: ValidatedCode,
         context: OperationContext
     ): AutomationResponse {
         val failures = context.objectsOfType(ValidationFailure::class.java)
@@ -513,9 +666,9 @@ config = {
         
         logger.warn { "Goal achieved (failure): max retries exhausted with errors: $errorSummary" }
 
-        return AutomationResponse.maxRetriesExhausted(generatedCode.attempt).copy(
+        return AutomationResponse.maxRetriesExhausted(validatedCode.attempt).copy(
             message = "I attempted to generate an automation for your request, but " +
-                "encountered issues that I couldn't resolve automatically after ${generatedCode.attempt} attempts. " +
+                "encountered issues that I couldn't resolve automatically after ${validatedCode.attempt} attempts. " +
                 "The last errors were: $errorSummary\n\n" +
                 "Could you try again with more specific requirements?"
         )
@@ -529,7 +682,7 @@ config = {
             startingInputTypes = [UserInput::class]
         )
     )
-    @Action
+    @Action(pre = [IS_QUESTION_OR_CHAT])
     fun respondConversationally(answer: ConversationalAnswer): AutomationResponse {
         logger.info { "Goal achieved: responding conversationally" }
         return AutomationResponse.fromAnswer(answer)

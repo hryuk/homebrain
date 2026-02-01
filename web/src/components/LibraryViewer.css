@@ -112,6 +112,42 @@
   color: #8af;
 }
 
+.library-viewer .detail-panel .panel-header {
+  padding: 0;
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  background: transparent;
+  border-bottom: 1px solid #333;
+}
+
+.library-viewer .detail-panel .panel-header h2 {
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.library-viewer .actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.library-viewer .delete-btn {
+  padding: 0.25rem 0.75rem;
+  border: none;
+  border-radius: 0.25rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  background: #dc2626;
+  color: #fff;
+}
+
+.library-viewer .delete-btn:hover {
+  background: #ef4444;
+}
+
+.library-viewer .delete-btn:disabled {
+  background: #666;
+  cursor: not-allowed;
+}
+
 .library-viewer .detail-panel .code-preview {
   flex: 1;
   display: flex;

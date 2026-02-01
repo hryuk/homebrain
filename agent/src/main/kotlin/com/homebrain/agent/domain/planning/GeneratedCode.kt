@@ -108,3 +108,18 @@ data class GeneratedFileResponse(
     @get:JsonPropertyDescription("Type: 'automation' or 'library'")
     val type: String
 )
+
+/**
+ * Response from the library extraction LLM.
+ */
+@JsonClassDescription("Library extraction result")
+data class ExtractionResponse(
+    @get:JsonPropertyDescription("Whether any extraction was performed")
+    val extracted: Boolean,
+    
+    @get:JsonPropertyDescription("Summary of what was extracted")
+    val summary: String,
+    
+    @get:JsonPropertyDescription("The files after extraction (may include new library files)")
+    val files: List<GeneratedFileResponse>
+)

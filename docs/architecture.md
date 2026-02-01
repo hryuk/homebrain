@@ -166,9 +166,9 @@ Homebrain is a Docker-based, composable automation framework for MQTT systems. I
 │  ├── engine/                                                  │
 │  │   └── EngineClient             - HTTP client to Engine   │
 │  ├── ai/                                                      │
-│  │   ├── EmbabelChatAgent         - Embabel integration     │
-│  │   ├── CodeFixerAgent           - Fixes validation errors │
-│  │   └── MqttLlmTools             - LLM-callable tools      │
+│  │   ├── HomebrainAgent           - GOAP-based automation agent │
+│  │   ├── MqttLlmTools             - LLM-callable tools      │
+│  │   └── PromptLoader             - Loads prompts from Markdown │
 │  └── websocket/                                               │
 │      └── LogsWebSocketHandler     - Real-time log streaming │
 ├─────────────────────────────────────────────────────────────┤
@@ -278,18 +278,62 @@ User                Web UI              Agent                    Engine
   │◄──────────────────│                   │                        │
 ```
 
+### GOAP-Based Code Generation
+
+The agent uses Embabel's Goal Oriented Action Planning (GOAP) to intelligently sequence actions:
+
+```
+UserInput → parseIntent → extractRequirements → gatherContext → generateCode 
+→ extractToLibrary → validateCode → [fixInvalidCode loop] → respondWithAutomation
+```
+
+**Key Actions:**
+
+| Action | Input → Output | Description |
+|--------|----------------|-------------|
+| `parseIntent` | UserInput → ParsedIntent | Classify user message |
+| `extractRequirements` | ParsedIntent → AutomationRequirements | Extract triggers, actions, conditions |
+| `gatherContext` | AutomationRequirements → GatheredContext | Gather MQTT topics, similar code |
+| `generateCode` | Requirements + Context → GeneratedCode | Generate Starlark code using LLM |
+| `extractToLibrary` | GeneratedCode → ExtractedCode | Extract reusable logic to libraries |
+| `validateCode` | ExtractedCode → ValidatedCode | Validate code against the engine |
+| `fixInvalidCode` | ValidatedCode → ExtractedCode | Fix validation errors (up to 3 attempts) |
+| `respondWithAutomation` | ValidatedCode → AutomationResponse | Return validated code to user |
+
+**Type-based sequencing:** The intermediate types `ExtractedCode` and `ValidatedCode` ensure GOAP runs actions in order:
+- `extractToLibrary` must run because `validateCode` requires `ExtractedCode`
+- `validateCode` must run because `respondWithAutomation` requires `ValidatedCode`
+- `fixInvalidCode` returns `ExtractedCode` so it feeds back into `validateCode`
+
+### Library Extraction
+
+After code generation, the `extractToLibrary` action analyzes the code for reusable patterns:
+
+**What gets extracted:**
+- Explicit helper functions (any `def` other than `on_message`/`on_schedule`)
+- Inlined reusable patterns (blink loops, device iterations, fades, scenes)
+
+**How it works:**
+1. LLM analyzes the generated code
+2. Uses `getLibraryModules()` and `getLibraryCode()` tools to check existing libraries
+3. Extends existing libraries or creates new ones as needed
+4. Updates automation to use `ctx.lib.module.function()` calls
+
+This ensures automations stay simple while reusable logic is pushed to shared libraries.
+
 ### Code Validation Flow
 
 Generated Starlark code is validated before being shown to the user:
 
-1. **LLM generates code** via EmbabelChatAgent
-2. **ChatUseCase validates** each file via `EngineClient.validateCode()`
-3. **If validation fails:**
-   - CodeFixerAgent receives original code + error messages
+1. **LLM generates code** via GOAP agent
+2. **Library extraction** analyzes and refactors reusable logic
+3. **Validation** checks each file via `EngineClient.validateCode()`
+4. **If validation fails:**
+   - fixInvalidCode action receives original code + error messages
    - Attempts to fix the code
    - Fixed code is re-validated
    - Loop continues until valid or max attempts (3) reached
-4. **If all attempts fail:**
+5. **If all attempts fail:**
    - User receives a message explaining the issue
    - No code proposal is returned
    - User can try again with clearer requirements

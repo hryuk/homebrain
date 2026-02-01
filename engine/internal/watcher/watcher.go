@@ -149,6 +149,13 @@ func (w *Watcher) handleWrite(filePath string) {
 }
 
 func (w *Watcher) handleRemove(filePath string) {
+	// Check if it's a library file
+	if isLibraryFile(filePath) {
+		slog.Info("Library module removed", "file", filePath)
+		w.reloadLibraries()
+		return
+	}
+	
 	slog.Info("Automation removed", "file", filePath)
 	id := automationIDFromPath(filePath)
 	w.runner.UnloadAutomation(id)

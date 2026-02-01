@@ -1,9 +1,12 @@
 package com.homebrain.agent.api.rest
 
+import com.homebrain.agent.api.dto.CommitInfoDto
 import com.homebrain.agent.api.dto.LibraryCodeDto
 import com.homebrain.agent.api.dto.LibraryModuleDto
 import com.homebrain.agent.api.mapper.LibraryMapper
 import com.homebrain.agent.application.LibraryUseCase
+import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
@@ -34,5 +37,14 @@ class LibraryController(
     fun getModuleCode(@PathVariable name: String): LibraryCodeDto {
         val code = libraryUseCase.getModuleCode(name)
         return libraryMapper.toCodeDto(name, code)
+    }
+
+    /**
+     * Delete a library module.
+     */
+    @DeleteMapping("/{name}")
+    fun deleteModule(@PathVariable name: String): ResponseEntity<CommitInfoDto> {
+        val commit = libraryUseCase.delete(name)
+        return ResponseEntity.ok(libraryMapper.toCommitDto(commit))
     }
 }

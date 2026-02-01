@@ -1,25 +1,37 @@
 package com.homebrain.agent.application
 
+import com.homebrain.agent.domain.commit.Commit
 import com.homebrain.agent.domain.library.LibraryModule
 import com.homebrain.agent.infrastructure.engine.EngineClient
-import io.mockk.every
-import io.mockk.mockk
-import io.mockk.verify
+import com.homebrain.agent.infrastructure.persistence.GitOperations
+import io.mockk.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import java.time.Instant
 
 class LibraryUseCaseTest {
 
     private lateinit var engineClient: EngineClient
+    private lateinit var gitOperations: GitOperations
+    private lateinit var codeEmbeddingService: CodeEmbeddingService
     private lateinit var useCase: LibraryUseCase
+
+    private val sampleCommit = Commit(
+        hash = "abc123def",
+        message = "Delete library: lib/test.lib.star",
+        author = "homebrain",
+        timestamp = Instant.now()
+    )
 
     @BeforeEach
     fun setUp() {
         engineClient = mockk()
-        useCase = LibraryUseCase(engineClient)
+        gitOperations = mockk()
+        codeEmbeddingService = mockk(relaxed = true)
+        useCase = LibraryUseCase(engineClient, gitOperations, codeEmbeddingService)
     }
 
     @Nested
@@ -85,6 +97,53 @@ class LibraryUseCaseTest {
             val result = useCase.getModuleCode("my_module_v2")
 
             assertEquals(code, result)
+        }
+    }
+
+    @Nested
+    inner class Delete {
+        @Test
+        fun `should delete existing library module`() {
+            every { gitOperations.fileExists("lib/timers.lib.star") } returns true
+            every { gitOperations.deleteFile("lib/timers.lib.star") } just runs
+            every { gitOperations.commit(any()) } returns sampleCommit
+
+            val result = useCase.delete("timers")
+
+            assertEquals(sampleCommit, result)
+            verify { gitOperations.deleteFile("lib/timers.lib.star") }
+            verify { gitOperations.commit("Delete library: lib/timers.lib.star") }
+        }
+
+        @Test
+        fun `should throw when library not found`() {
+            every { gitOperations.fileExists("lib/nonexistent.lib.star") } returns false
+
+            assertThrows<LibraryModuleNotFoundException> {
+                useCase.delete("nonexistent")
+            }
+        }
+
+        @Test
+        fun `should trigger embedding removal after delete`() {
+            every { gitOperations.fileExists("lib/utils.lib.star") } returns true
+            every { gitOperations.deleteFile("lib/utils.lib.star") } just runs
+            every { gitOperations.commit(any()) } returns sampleCommit
+
+            useCase.delete("utils")
+
+            verify { codeEmbeddingService.removeLibrary("utils") }
+        }
+
+        @Test
+        fun `should return commit with correct message`() {
+            every { gitOperations.fileExists("lib/helpers.lib.star") } returns true
+            every { gitOperations.deleteFile("lib/helpers.lib.star") } just runs
+            every { gitOperations.commit("Delete library: lib/helpers.lib.star") } returns sampleCommit
+
+            val result = useCase.delete("helpers")
+
+            assertEquals(sampleCommit.hash, result.hash)
         }
     }
 }

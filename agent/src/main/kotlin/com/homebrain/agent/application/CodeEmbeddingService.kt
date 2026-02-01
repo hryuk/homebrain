@@ -5,6 +5,7 @@ import com.homebrain.agent.infrastructure.embedding.CodeRankEmbedClient
 import com.homebrain.agent.infrastructure.embedding.DuckDBVectorStore
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import java.nio.file.Files
 import java.nio.file.Path
@@ -39,7 +40,9 @@ class CodeEmbeddingService(
     
     /**
      * Index a single automation by name.
+     * Runs asynchronously to avoid blocking API responses.
      */
+    @Async("embeddingExecutor")
     fun indexAutomation(name: String, code: String) {
         if (!isReady()) {
             logger.warn { "Embedding service not ready, skipping indexing for automation: $name" }
@@ -60,7 +63,9 @@ class CodeEmbeddingService(
     
     /**
      * Index a single library module by name.
+     * Runs asynchronously to avoid blocking API responses.
      */
+    @Async("embeddingExecutor")
     fun indexLibrary(name: String, code: String) {
         if (!isReady()) {
             logger.warn { "Embedding service not ready, skipping indexing for library: $name" }
@@ -81,7 +86,9 @@ class CodeEmbeddingService(
     
     /**
      * Remove an automation from the index.
+     * Runs asynchronously to avoid blocking API responses.
      */
+    @Async("embeddingExecutor")
     fun removeAutomation(name: String) {
         vectorStore.delete(IndexedCode.automationId(name))
         logger.debug { "Removed automation from index: $name" }
@@ -89,7 +96,9 @@ class CodeEmbeddingService(
     
     /**
      * Remove a library from the index.
+     * Runs asynchronously to avoid blocking API responses.
      */
+    @Async("embeddingExecutor")
     fun removeLibrary(name: String) {
         vectorStore.delete(IndexedCode.libraryId(name))
         logger.debug { "Removed library from index: $name" }
