@@ -4,10 +4,11 @@ import AutomationList from './components/AutomationList'
 import LibraryViewer from './components/LibraryViewer'
 import GlobalStateViewer from './components/GlobalStateViewer'
 import LogViewer from './components/LogViewer'
+import MqttViewer from './components/MqttViewer'
 
 import './App.css'
 
-type Tab = 'chat' | 'automations' | 'libraries' | 'globalState' | 'logs'
+type Tab = 'chat' | 'automations' | 'libraries' | 'globalState' | 'mqtt' | 'logs'
 
 export default function App() {
   const [activeTab, setActiveTab] = createSignal<Tab>('chat')
@@ -42,6 +43,12 @@ export default function App() {
             Global State
           </button>
           <button
+            class={activeTab() === 'mqtt' ? 'active' : ''}
+            onClick={() => setActiveTab('mqtt')}
+          >
+            MQTT
+          </button>
+          <button
             class={activeTab() === 'logs' ? 'active' : ''}
             onClick={() => setActiveTab('logs')}
           >
@@ -62,6 +69,9 @@ export default function App() {
         </Show>
         <Show when={activeTab() === 'globalState'}>
           <GlobalStateViewer />
+        </Show>
+        <Show when={activeTab() === 'mqtt'}>
+          <MqttViewer />
         </Show>
         <Show when={activeTab() === 'logs'}>
           <LogViewer />

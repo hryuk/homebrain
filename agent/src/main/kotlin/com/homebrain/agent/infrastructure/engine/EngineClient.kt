@@ -5,12 +5,17 @@ import com.homebrain.agent.domain.library.GlobalStateSchema
 import com.homebrain.agent.domain.validation.ValidationResult
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.http.client.reactive.ReactorClientHttpConnector
 import org.springframework.stereotype.Component
+import org.springframework.web.reactive.function.client.ExchangeStrategies
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.bodyToMono
 import reactor.core.publisher.Mono
 
 private val logger = KotlinLogging.logger {}
+
+// 2MB buffer size for large MQTT message responses
+private const val MAX_BUFFER_SIZE = 2 * 1024 * 1024
 
 /**
  * HTTP client for communicating with the Go automation engine.
@@ -23,8 +28,13 @@ class EngineClient(
     @Value("\${app.engine.url}")
     private val engineUrl: String
 ) {
+    private val exchangeStrategies = ExchangeStrategies.builder()
+        .codecs { it.defaultCodecs().maxInMemorySize(MAX_BUFFER_SIZE) }
+        .build()
+
     private val webClient = WebClient.builder()
         .baseUrl(engineUrl)
+        .exchangeStrategies(exchangeStrategies)
         .build()
 
     /**
@@ -75,6 +85,23 @@ class EngineClient(
                 .block() ?: emptyList()
         } catch (e: Exception) {
             logger.warn(e) { "Failed to fetch logs from engine" }
+            emptyList()
+        }
+    }
+
+    /**
+     * Gets recent MQTT messages from the engine for visualization.
+     */
+    fun getMessages(): List<Map<String, Any>> {
+        logger.debug { "Fetching MQTT messages from engine" }
+        return try {
+            webClient.get()
+                .uri("/messages")
+                .retrieve()
+                .bodyToMono<List<Map<String, Any>>>()
+                .block() ?: emptyList()
+        } catch (e: Exception) {
+            logger.warn(e) { "Failed to fetch messages from engine" }
             emptyList()
         }
     }

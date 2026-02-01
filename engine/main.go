@@ -122,6 +122,13 @@ func startAPI(r *runner.Runner, mqttClient *mqtt.Client, stateStore *state.Store
 		json.NewEncoder(w).Encode(topics)
 	})
 
+	// Get recent MQTT messages for visualization
+	mux.HandleFunc("GET /messages", func(w http.ResponseWriter, req *http.Request) {
+		messages := mqttClient.GetRecentMessages()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(messages)
+	})
+
 	// Get logs (recent log entries)
 	mux.HandleFunc("GET /logs", func(w http.ResponseWriter, req *http.Request) {
 		logs := r.GetLogs()

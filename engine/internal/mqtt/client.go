@@ -24,12 +24,14 @@ type Client struct {
 	mu               sync.RWMutex
 	discoveredTopics map[string]time.Time
 	topicsMu         sync.RWMutex
+	messageBuffer    *MessageBuffer
 }
 
 func New(cfg Config) (*Client, error) {
 	c := &Client{
 		handlers:         make(map[string][]MessageHandler),
 		discoveredTopics: make(map[string]time.Time),
+		messageBuffer:    NewMessageBuffer(5000),
 	}
 
 	opts := paho.NewClientOptions()
@@ -74,9 +76,13 @@ func New(cfg Config) (*Client, error) {
 
 func (c *Client) subscribeForDiscovery() {
 	token := c.client.Subscribe("#", 0, func(client paho.Client, msg paho.Message) {
+		// Track discovered topics
 		c.topicsMu.Lock()
 		c.discoveredTopics[msg.Topic()] = time.Now()
 		c.topicsMu.Unlock()
+
+		// Store message in buffer for visualization
+		c.messageBuffer.Add(msg.Topic(), msg.Payload())
 	})
 	token.Wait()
 }
@@ -90,6 +96,11 @@ func (c *Client) GetDiscoveredTopics() []string {
 		topics = append(topics, topic)
 	}
 	return topics
+}
+
+// GetRecentMessages returns all captured MQTT messages in chronological order
+func (c *Client) GetRecentMessages() []MessageEntry {
+	return c.messageBuffer.GetAll()
 }
 
 func (c *Client) Subscribe(topic string, handler MessageHandler) error {

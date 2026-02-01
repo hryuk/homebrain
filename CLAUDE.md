@@ -151,6 +151,7 @@ After any code change, update relevant documentation:
       - `PromptLoader.kt` - Loads prompts from Markdown files
     - `websocket/` - Real-time communication
       - `LogsWebSocketHandler.kt` - Log streaming
+      - `MqttWebSocketHandler.kt` - MQTT message streaming
     - `embedding/` - Code embeddings
       - `CodeRankEmbedClient.kt` - DJL + ONNX embedding model
       - `DuckDBVectorStore.kt` - DuckDB vector storage
@@ -171,6 +172,7 @@ After any code change, update relevant documentation:
 - `src/components/AutomationList.tsx` - Automation management
 - `src/components/LibraryViewer.tsx` - Library module browser with source code viewer
 - `src/components/GlobalStateViewer.tsx` - Global state viewer with ownership info
+- `src/components/MqttViewer.tsx` - Real-time MQTT message visualizer
 - `src/components/LogViewer.tsx` - Real-time log viewer
 
 ## Commands
@@ -212,9 +214,11 @@ cd web && npm run dev
 | DELETE | `/api/libraries/{name}` | Delete library module |
 | GET | `/api/global-state` | Get global state values with ownership |
 | GET | `/api/logs` | Get recent logs |
+| GET | `/api/mqtt/messages` | Get recent MQTT messages |
 | GET | `/api/history` | Git commit history |
 | GET | `/health` | Health check (returns "ok") |
 | WS | `/ws/logs` | Real-time log stream |
+| WS | `/ws/mqtt` | Real-time MQTT message stream |
 
 ### Engine API (`:9000`, internal)
 | Method | Endpoint | Description |
@@ -222,6 +226,7 @@ cd web && npm run dev
 | GET | `/health` | Health check |
 | GET | `/automations` | List running automations |
 | GET | `/topics` | Discovered MQTT topics |
+| GET | `/messages` | Recent MQTT messages for visualization |
 | GET | `/logs` | Recent automation logs |
 | GET | `/library` | List library modules with functions |
 | GET | `/library/{name}` | Get module source code |
