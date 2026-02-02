@@ -1,5 +1,5 @@
 import { createSignal, onMount, onCleanup, For, Show } from 'solid-js'
-import './GlobalStateViewer.css'
+import { Database, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-solid'
 
 interface GlobalStateEntry {
   key: string
@@ -18,7 +18,7 @@ export default function GlobalStateViewer() {
   const [lastUpdate, setLastUpdate] = createSignal<number>(0)
   const [autoRefresh, setAutoRefresh] = createSignal(true)
   const [expandedKeys, setExpandedKeys] = createSignal<Set<string>>(new Set())
-  
+
   let refreshInterval: number | undefined
 
   const fetchGlobalState = async () => {
@@ -37,7 +37,7 @@ export default function GlobalStateViewer() {
   }
 
   const toggleExpand = (key: string) => {
-    setExpandedKeys(prev => {
+    setExpandedKeys((prev) => {
       const newSet = new Set(prev)
       if (newSet.has(key)) {
         newSet.delete(key)
@@ -69,7 +69,7 @@ export default function GlobalStateViewer() {
   const toggleAutoRefresh = () => {
     const newValue = !autoRefresh()
     setAutoRefresh(newValue)
-    
+
     if (newValue) {
       refreshInterval = setInterval(fetchGlobalState, 5000) as unknown as number
     } else if (refreshInterval) {
@@ -78,7 +78,6 @@ export default function GlobalStateViewer() {
     }
   }
 
-  // Group entries by key prefix for visual organization
   const groupedEntries = () => {
     const groups: Record<string, GlobalStateEntry[]> = {}
     for (const entry of state()) {
@@ -103,98 +102,133 @@ export default function GlobalStateViewer() {
   })
 
   return (
-    <div class="global-state-viewer">
-      <div class="panel-header">
-        <div class="header-left">
-          <h2>Global State</h2>
-          <span class="entry-count">{state().length} entries</span>
-        </div>
-        <div class="header-right">
-          <span class="last-update">
-            Updated: {formatTimestamp(lastUpdate())}
+    <div class="flex flex-col h-full">
+      {/* Header */}
+      <div class="flex items-center justify-between px-4 py-2 border-b border-border bg-card">
+        <div class="flex items-center gap-2">
+          <Database class="h-3 w-3 text-muted-foreground" />
+          <span class="text-xs font-mono text-muted-foreground">
+            state ({state().length} entries)
           </span>
-          <button 
-            class={`auto-refresh-btn ${autoRefresh() ? 'active' : ''}`}
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span class="text-[9px] text-muted-foreground font-mono">
+            {formatTimestamp(lastUpdate())}
+          </span>
+          <button
             onClick={toggleAutoRefresh}
+            class={`flex items-center gap-1 px-2 py-1 text-[10px] font-mono border transition-colors ${
+              autoRefresh()
+                ? 'border-primary text-primary'
+                : 'border-border text-muted-foreground hover:text-foreground'
+            }`}
           >
-            {autoRefresh() ? 'Auto-refresh ON' : 'Auto-refresh OFF'}
+            {autoRefresh() ? (
+              <ToggleRight class="h-3 w-3" />
+            ) : (
+              <ToggleLeft class="h-3 w-3" />
+            )}
+            auto
           </button>
-          <button onClick={fetchGlobalState} class="refresh-btn">
-            Refresh
+          <button
+            onClick={fetchGlobalState}
+            class="flex items-center gap-1 px-2 py-1 text-[10px] font-mono text-muted-foreground border border-border hover:text-foreground hover:border-muted-foreground transition-colors"
+          >
+            <RefreshCw class="h-2.5 w-2.5" />
+            refresh
           </button>
         </div>
       </div>
 
       <Show when={loading()}>
-        <div class="loading">Loading...</div>
+        <div class="flex items-center justify-center h-32 text-xs font-mono text-muted-foreground">
+          Loading...
+        </div>
       </Show>
 
       <Show when={!loading() && state().length === 0}>
-        <div class="empty">
-          No global state entries yet.
-          <br />
-          <span class="hint">Automations can use ctx.set_global() to store shared state.</span>
+        <div class="flex flex-col items-center justify-center h-32 text-xs font-mono text-muted-foreground">
+          <p>No global state entries yet.</p>
+          <p class="text-[10px] mt-1">
+            Automations can use ctx.set_global() to store shared state.
+          </p>
         </div>
       </Show>
 
       <Show when={!loading() && state().length > 0}>
-        <div class="state-table">
-          <div class="table-header">
-            <div class="col-key">Key</div>
-            <div class="col-value">Value</div>
-            <div class="col-owners">Owners</div>
+        <div class="flex-1 overflow-auto">
+          {/* Header row */}
+          <div class="grid grid-cols-[180px_1fr_80px] gap-4 px-4 py-2 border-b border-border bg-secondary/30 text-[9px] font-mono text-muted-foreground">
+            <span>key</span>
+            <span>value</span>
+            <span>owner</span>
           </div>
-          
-          <div class="table-body">
-            <For each={Object.entries(groupedEntries())}>
-              {([prefix, entries]) => (
-                <>
-                  <div class="group-header">{prefix}</div>
-                  <For each={entries}>
-                    {(entry) => (
-                      <div class="state-row">
-                        <div class="col-key">
-                          <span class="key-name">{entry.key}</span>
-                        </div>
-                        <div class="col-value">
-                          <Show when={isComplexValue(entry.value)}>
-                            <button 
-                              class="expand-btn"
-                              onClick={() => toggleExpand(entry.key)}
-                            >
-                              {expandedKeys().has(entry.key) ? '[-]' : '[+]'}
-                            </button>
-                          </Show>
-                          <Show when={expandedKeys().has(entry.key) || !isComplexValue(entry.value)}>
-                            <pre class="value-content">{formatValue(entry.value)}</pre>
-                          </Show>
-                          <Show when={!expandedKeys().has(entry.key) && isComplexValue(entry.value)}>
-                            <span class="value-preview">
-                              {Array.isArray(entry.value) 
-                                ? `Array(${entry.value.length})` 
-                                : `Object(${Object.keys(entry.value).length})`}
-                            </span>
-                          </Show>
-                        </div>
-                        <div class="col-owners">
-                          <Show when={entry.owners.length > 0}>
-                            <For each={entry.owners}>
-                              {(owner) => (
-                                <span class="owner-tag">{owner}</span>
-                              )}
-                            </For>
-                          </Show>
-                          <Show when={entry.owners.length === 0}>
-                            <span class="no-owner">No owner</span>
-                          </Show>
-                        </div>
+
+          <For each={Object.entries(groupedEntries())}>
+            {([prefix, entries]) => (
+              <>
+                {/* Section header */}
+                <div class="px-4 py-1.5 bg-muted/30 border-b border-border">
+                  <span class="text-[9px] font-mono text-primary flex items-center gap-1.5">
+                    <span class="w-1 h-1 bg-primary" />
+                    {prefix}
+                  </span>
+                </div>
+
+                {/* Rows */}
+                <For each={entries}>
+                  {(entry) => (
+                    <div class="grid grid-cols-[180px_1fr_80px] gap-4 px-4 py-2 border-b border-border/50 hover:bg-muted/20 transition-colors">
+                      <code class="text-[10px] text-primary font-mono break-all self-start">
+                        {entry.key}
+                      </code>
+                      <div class="overflow-auto max-h-32">
+                        <Show when={isComplexValue(entry.value)}>
+                          <button
+                            onClick={() => toggleExpand(entry.key)}
+                            class="text-[9px] font-mono text-muted-foreground hover:text-foreground mr-2"
+                          >
+                            {expandedKeys().has(entry.key) ? '[-]' : '[+]'}
+                          </button>
+                        </Show>
+                        <Show
+                          when={expandedKeys().has(entry.key) || !isComplexValue(entry.value)}
+                        >
+                          <pre class="text-[10px] font-mono text-foreground whitespace-pre-wrap break-all p-2 bg-background border border-border">
+                            {formatValue(entry.value)}
+                          </pre>
+                        </Show>
+                        <Show
+                          when={!expandedKeys().has(entry.key) && isComplexValue(entry.value)}
+                        >
+                          <span class="text-[10px] font-mono text-muted-foreground">
+                            {Array.isArray(entry.value)
+                              ? `Array(${entry.value.length})`
+                              : `Object(${Object.keys(entry.value).length})`}
+                          </span>
+                        </Show>
                       </div>
-                    )}
-                  </For>
-                </>
-              )}
-            </For>
-          </div>
+                      <div class="self-start">
+                        <Show when={entry.owners.length > 0}>
+                          <For each={entry.owners}>
+                            {(owner) => (
+                              <span class="inline-block text-[9px] font-mono text-success bg-success/10 border border-success/30 px-1 mr-1 mb-1">
+                                {owner}
+                              </span>
+                            )}
+                          </For>
+                        </Show>
+                        <Show when={entry.owners.length === 0}>
+                          <span class="text-[10px] text-muted-foreground font-mono">—</span>
+                        </Show>
+                      </div>
+                    </div>
+                  )}
+                </For>
+              </>
+            )}
+          </For>
         </div>
       </Show>
     </div>

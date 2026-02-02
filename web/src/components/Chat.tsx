@@ -1,6 +1,6 @@
 import { createSignal, Show, For } from 'solid-js'
+import { Send, Lightbulb, Zap, Clock, Command } from 'lucide-solid'
 import CodePreview from './CodePreview'
-import './Chat.css'
 
 interface FileProposal {
   code: string
@@ -31,25 +31,30 @@ interface ChatResponse {
   }
 }
 
+const examplePrompts = [
+  { text: 'What lights are available?', icon: Lightbulb },
+  { text: 'What automations are running?', icon: Zap },
+  { text: 'When motion is detected in the hallway, turn on the light for 2 minutes', icon: Clock },
+  { text: 'Blink the kitchen light 3 times', icon: Command },
+]
+
 export default function Chat() {
   const [messages, setMessages] = createSignal<Message[]>([])
   const [input, setInput] = createSignal('')
   const [loading, setLoading] = createSignal(false)
   const [pendingProposal, setPendingProposal] = createSignal<CodeProposal | null>(null)
 
-  const sendMessage = async () => {
-    const text = input().trim()
-    if (!text || loading()) return
+  const sendMessage = async (text?: string) => {
+    const messageText = text || input().trim()
+    if (!messageText || loading()) return
 
-    // Add user message
-    const userMessage: Message = { role: 'user', content: text }
+    const userMessage: Message = { role: 'user', content: messageText }
     setMessages([...messages(), userMessage])
     setInput('')
     setLoading(true)
     setPendingProposal(null)
 
     try {
-      // Build conversation history for context
       const history = messages().map((m) => ({
         role: m.role,
         content: m.content,
@@ -59,7 +64,7 @@ export default function Chat() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: text,
+          message: messageText,
           conversation_history: history,
         }),
       })
@@ -70,7 +75,6 @@ export default function Chat() {
 
       const data: ChatResponse = await response.json()
 
-      // Add assistant message
       const assistantMessage: Message = {
         role: 'assistant',
         content: data.message,
@@ -88,7 +92,6 @@ export default function Chat() {
 
       setMessages([...messages(), assistantMessage])
 
-      // Set pending proposal if there's code to deploy
       if (data.code_proposal) {
         setPendingProposal({
           summary: data.code_proposal.summary,
@@ -118,7 +121,6 @@ export default function Chat() {
 
     setLoading(true)
     try {
-      // Use multi-deploy endpoint for all proposals (supports both single and multi-file)
       const response = await fetch('/api/automations/deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -177,7 +179,10 @@ export default function Chat() {
     }
   }
 
-  // Helper to get deploy bar text
+  const handleExampleClick = (prompt: string) => {
+    setInput(prompt)
+  }
+
   const getDeployBarText = () => {
     const proposal = pendingProposal()
     if (!proposal) return ''
@@ -197,70 +202,129 @@ export default function Chat() {
   }
 
   return (
-    <div class="chat">
-      <div class="chat-messages">
+    <div class="flex flex-col h-full">
+      <div class="flex-1 overflow-auto p-6">
         <Show when={messages().length === 0}>
-          <div class="chat-welcome">
-            <h2>Your Smart Home Assistant</h2>
-            <p>Ask me anything about your smart home or describe automations you'd like to create.</p>
-            <div class="examples">
-              <p>Examples:</p>
-              <ul>
-                <li>"What lights are available?"</li>
-                <li>"What automations are running?"</li>
-                <li>"When motion is detected in the hallway, turn on the light for 2 minutes"</li>
-                <li>"Blink the kitchen light 3 times"</li>
-              </ul>
+          <div class="flex flex-col items-center justify-center h-full max-w-lg mx-auto">
+            <div class="text-center mb-8">
+              <h1 class="text-sm font-mono text-foreground mb-2">homebrain assistant</h1>
+              <p class="text-xs font-mono text-muted-foreground">
+                control your smart home or create automations
+              </p>
+            </div>
+
+            <div class="w-full">
+              <p class="text-[10px] font-mono text-muted-foreground mb-2">examples:</p>
+              
+              <div class="space-y-1">
+                <For each={examplePrompts}>
+                  {(prompt) => {
+                    const Icon = prompt.icon
+                    return (
+                      <button
+                        onClick={() => handleExampleClick(prompt.text)}
+                        class="flex items-center gap-3 w-full text-left px-3 py-2 border border-border bg-card hover:border-primary/50 transition-colors"
+                      >
+                        <Icon class="w-3 h-3 text-muted-foreground" />
+                        <span class="text-xs font-mono text-muted-foreground hover:text-foreground">
+                          {prompt.text}
+                        </span>
+                      </button>
+                    )
+                  }}
+                </For>
+              </div>
             </div>
           </div>
         </Show>
 
-        <For each={messages()}>
-          {(msg) => (
-            <div class={`message ${msg.role}`}>
-              <div class="message-content">{msg.content}</div>
-              <Show when={msg.codeProposal}>
-                <For each={msg.codeProposal!.files}>
-                  {(file) => <CodePreview code={file.code} filename={file.filename} type={file.type} />}
-                </For>
-              </Show>
-            </div>
-          )}
-        </For>
+        <Show when={messages().length > 0}>
+          <div class="max-w-2xl mx-auto space-y-2">
+            <For each={messages()}>
+              {(msg) => (
+                <div
+                  class={`p-3 border text-xs font-mono ${
+                    msg.role === 'user'
+                      ? 'border-primary/30 bg-primary/5 ml-8'
+                      : 'border-border bg-card mr-8'
+                  }`}
+                >
+                  <span class="text-[9px] text-muted-foreground block mb-1">
+                    {msg.role === 'user' ? '> you' : '< assistant'}
+                  </span>
+                  <p class="text-foreground leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                  <Show when={msg.codeProposal}>
+                    <div class="mt-3 space-y-2">
+                      <For each={msg.codeProposal!.files}>
+                        {(file) => (
+                          <CodePreview
+                            code={file.code}
+                            filename={file.filename}
+                            type={file.type}
+                          />
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                </div>
+              )}
+            </For>
 
-        <Show when={loading()}>
-          <div class="message assistant">
-            <div class="message-content loading">Thinking...</div>
+            <Show when={loading()}>
+              <div class="p-3 border border-border bg-card mr-8 text-xs font-mono">
+                <span class="text-[9px] text-muted-foreground block mb-1">{'< assistant'}</span>
+                <p class="text-muted-foreground animate-pulse">thinking...</p>
+              </div>
+            </Show>
           </div>
         </Show>
       </div>
 
+      {/* Deploy bar */}
       <Show when={pendingProposal()}>
-        <div class="deploy-bar">
-          <span>{getDeployBarText()}</span>
-          <div class="deploy-actions">
-            <button class="cancel-btn" onClick={cancelProposal} disabled={loading()}>
-              Cancel
-            </button>
-            <button class="deploy-btn" onClick={deployCode} disabled={loading()}>
-              Deploy
-            </button>
+        <div class="border-t border-success/30 bg-success/5 p-3">
+          <div class="max-w-2xl mx-auto flex items-center justify-between">
+            <span class="text-xs font-mono text-success">{getDeployBarText()}</span>
+            <div class="flex gap-2">
+              <button
+                onClick={cancelProposal}
+                disabled={loading()}
+                class="px-2 py-1 text-[10px] font-mono text-muted-foreground border border-border hover:text-foreground hover:border-muted-foreground transition-colors disabled:opacity-50"
+              >
+                cancel
+              </button>
+              <button
+                onClick={deployCode}
+                disabled={loading()}
+                class="px-2 py-1 text-[10px] font-mono text-success border border-success/30 hover:bg-success/10 transition-colors disabled:opacity-50"
+              >
+                deploy
+              </button>
+            </div>
           </div>
         </div>
       </Show>
 
-      <div class="chat-input">
-        <textarea
-          value={input()}
-          onInput={(e) => setInput(e.currentTarget.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Ask about your smart home or describe an automation..."
-          disabled={loading()}
-          rows={2}
-        />
-        <button onClick={sendMessage} disabled={loading() || !input().trim()}>
-          Send
-        </button>
+      {/* Input */}
+      <div class="border-t border-border p-4 bg-card">
+        <div class="max-w-2xl mx-auto flex gap-2">
+          <input
+            type="text"
+            value={input()}
+            onInput={(e) => setInput(e.currentTarget.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="ask or describe an automation..."
+            disabled={loading()}
+            class="flex-1 bg-background border border-border px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors disabled:opacity-50"
+          />
+          <button
+            onClick={() => sendMessage()}
+            disabled={loading() || !input().trim()}
+            class="px-3 py-2 bg-primary text-primary-foreground text-xs font-mono hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Send class="h-3 w-3" />
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 3%;
+    --foreground: 0 0% 85%;
+
+    --card: 0 0% 5%;
+    --card-foreground: 0 0% 85%;
+
+    --popover: 0 0% 5%;
+    --popover-foreground: 0 0% 85%;
+
+    --primary: 0 70% 50%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 0 0% 8%;
+    --secondary-foreground: 0 0% 70%;
+
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 0 0% 12%;
+    --accent-foreground: 0 0% 85%;
+
+    --destructive: 0 60% 45%;
+    --destructive-foreground: 0 0% 98%;
+
+    --success: 140 50% 40%;
+    --success-foreground: 0 0% 98%;
+
+    --border: 0 0% 12%;
+    --input: 0 0% 8%;
+    --ring: 0 70% 50%;
+
+    --radius: 0.125rem;
+
+    /* Syntax - muted tones */
+    --syntax-keyword: 0 60% 60%;
+    --syntax-function: 200 40% 60%;
+    --syntax-string: 140 35% 50%;
+    --syntax-comment: 0 0% 35%;
+    --syntax-variable: 40 50% 55%;
+    --syntax-number: 270 40% 60%;
+    --syntax-operator: 0 0% 55%;
+
+    --sidebar-background: 0 0% 4%;
+    --sidebar-foreground: 0 0% 70%;
+    --sidebar-primary: 0 70% 50%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 0 0% 10%;
+    --sidebar-accent-foreground: 0 0% 85%;
+    --sidebar-border: 0 0% 10%;
+    --sidebar-ring: 0 70% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+  }
+
+  #root {
+    height: 100vh;
+  }
+
+  /* Scrollbar - subtle */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/20 rounded-none;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+}
+
+@layer components {
+  .line-number {
+    @apply inline-block w-8 text-right pr-3 text-muted-foreground/40 select-none text-xs;
+  }
+
+  .code-line {
+    @apply block py-px;
+  }
+
+  .code-line:hover {
+    @apply bg-muted/30;
+  }
+}
+
+@layer utilities {
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-out forwards;
+  }
+}

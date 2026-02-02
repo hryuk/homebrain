@@ -1,5 +1,5 @@
 import { createSignal, onMount, onCleanup, For, Show } from 'solid-js'
-import './MqttViewer.css'
+import { Radio, Pause, Play, Trash2, Search, Copy, Check } from 'lucide-solid'
 
 interface MqttMessage {
   timestamp: string
@@ -16,6 +16,8 @@ export default function MqttViewer() {
   const [connected, setConnected] = createSignal(false)
   const [filter, setFilter] = createSignal('')
   const [expandedIndex, setExpandedIndex] = createSignal<number | null>(null)
+  const [isPaused, setIsPaused] = createSignal(false)
+  const [copiedIndex, setCopiedIndex] = createSignal<number | null>(null)
   let ws: WebSocket | null = null
 
   const connectWebSocket = () => {
@@ -32,14 +34,13 @@ export default function MqttViewer() {
     ws.onclose = () => {
       setConnected(false)
       console.log('MQTT WebSocket disconnected')
-      // Reconnect after delay
       setTimeout(connectWebSocket, 3000)
     }
 
     ws.onmessage = (event) => {
+      if (isPaused()) return
       try {
         const newMessages = JSON.parse(event.data)
-        // Prepend new messages (newest-first order)
         setMessages((prev) => [...newMessages, ...prev].slice(0, 5000))
       } catch (error) {
         console.error('Failed to parse MQTT message:', error)
@@ -86,22 +87,19 @@ export default function MqttViewer() {
       return `[binary: ${size} bytes]`
     }
 
-    // Try to parse and pretty-print JSON
     try {
       const parsed = JSON.parse(payload)
       const pretty = JSON.stringify(parsed, null, 2)
-      
+
       if (expandedIndex() === index) {
         return pretty
       }
-      
-      // Truncate if needed
+
       if (pretty.length > MAX_PAYLOAD_LENGTH) {
         return JSON.stringify(parsed)
       }
       return JSON.stringify(parsed)
     } catch {
-      // Not JSON, show as-is
       if (expandedIndex() === index) {
         return payload
       }
@@ -127,15 +125,16 @@ export default function MqttViewer() {
     setExpandedIndex((prev) => (prev === index ? null : index))
   }
 
-  const copyPayload = async (payload: string, isBinary: boolean) => {
+  const copyPayload = async (payload: string, isBinary: boolean, index: number) => {
     if (isBinary) return
     try {
-      // Try to pretty-print JSON
       const parsed = JSON.parse(payload)
       await navigator.clipboard.writeText(JSON.stringify(parsed, null, 2))
     } catch {
       await navigator.clipboard.writeText(payload)
     }
+    setCopiedIndex(index)
+    setTimeout(() => setCopiedIndex(null), 2000)
   }
 
   onMount(() => {
@@ -148,71 +147,122 @@ export default function MqttViewer() {
   })
 
   return (
-    <div class="mqtt-viewer">
-      <div class="mqtt-header">
-        <div class="mqtt-title">
-          <h2>MQTT Messages</h2>
-          <span class={`status ${connected() ? 'connected' : 'disconnected'}`}>
-            {connected() ? 'Live' : 'Disconnected'}
+    <div class="flex flex-col h-full">
+      {/* Header */}
+      <div class="flex items-center justify-between px-4 py-2 border-b border-border bg-card">
+        <div class="flex items-center gap-2">
+          <Radio class="h-3 w-3 text-muted-foreground" />
+          <span class="text-xs font-mono text-muted-foreground">mqtt</span>
+          <span
+            class={`text-[9px] font-mono px-1 ${
+              connected() && !isPaused() ? 'text-success' : 'text-muted-foreground'
+            }`}
+          >
+            {connected() ? (isPaused() ? '○ paused' : '● live') : '○ disconnected'}
           </span>
-          <span class="message-count">{filteredMessages().length} messages</span>
+          <span class="text-[9px] font-mono text-muted-foreground">
+            ({filteredMessages().length})
+          </span>
         </div>
-        <div class="mqtt-controls">
-          <input
-            type="text"
-            placeholder="Filter by topic..."
-            value={filter()}
-            onInput={(e) => setFilter(e.currentTarget.value)}
-            class="filter-input"
-          />
-          <button onClick={clearMessages} class="clear-btn">
-            Clear
+
+        <div class="flex items-center gap-2">
+          <div class="relative">
+            <Search class="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+            <input
+              type="text"
+              value={filter()}
+              onInput={(e) => setFilter(e.currentTarget.value)}
+              placeholder="filter topic..."
+              class="w-48 bg-background border border-border pl-7 pr-2 py-1 text-[10px] font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+            />
+          </div>
+          <button
+            onClick={() => setIsPaused(!isPaused())}
+            class={`flex items-center gap-1 px-2 py-1 text-[10px] font-mono border transition-colors ${
+              !isPaused()
+                ? 'border-primary text-primary'
+                : 'border-border text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {isPaused() ? <Play class="h-2.5 w-2.5" /> : <Pause class="h-2.5 w-2.5" />}
+            {isPaused() ? 'resume' : 'pause'}
+          </button>
+          <button
+            onClick={clearMessages}
+            class="flex items-center gap-1 px-2 py-1 text-[10px] font-mono text-muted-foreground border border-border hover:text-foreground hover:border-muted-foreground transition-colors"
+          >
+            <Trash2 class="h-2.5 w-2.5" />
+            clear
           </button>
         </div>
       </div>
 
-      <div class="mqtt-content">
+      {/* Messages */}
+      <div class="flex-1 overflow-auto">
         <For each={filteredMessages()}>
           {(msg, index) => (
-            <div class={`mqtt-entry ${expandedIndex() === index() ? 'expanded' : ''}`}>
-              <div class="mqtt-entry-header">
-                <span class="mqtt-time">{formatTimestamp(msg.timestamp)}</span>
-                <span class="mqtt-topic">{msg.topic}</span>
-                <div class="mqtt-actions">
+            <div
+              class={`border-b border-border/50 hover:bg-muted/20 transition-colors ${
+                expandedIndex() === index() ? 'bg-muted/10' : ''
+              }`}
+            >
+              {/* Message header */}
+              <div class="flex items-center gap-3 px-4 py-1.5">
+                <span class="text-[10px] text-muted-foreground whitespace-nowrap font-mono w-20 shrink-0">
+                  {formatTimestamp(msg.timestamp)}
+                </span>
+                <span class="text-[10px] text-primary font-mono flex-1 break-all">
+                  {msg.topic}
+                </span>
+                <div class="flex items-center gap-1 shrink-0">
                   <Show when={isExpandable(msg.payload, msg.is_binary)}>
                     <button
-                      class="expand-btn"
                       onClick={() => toggleExpand(index())}
-                      title={expandedIndex() === index() ? 'Collapse' : 'Expand'}
+                      class="text-[9px] font-mono text-muted-foreground hover:text-foreground px-1"
                     >
                       {expandedIndex() === index() ? '[-]' : '[+]'}
                     </button>
                   </Show>
                   <Show when={!msg.is_binary}>
                     <button
-                      class="copy-btn"
-                      onClick={() => copyPayload(msg.payload, msg.is_binary)}
-                      title="Copy payload"
+                      onClick={() => copyPayload(msg.payload, msg.is_binary, index())}
+                      class="flex items-center gap-1 text-[9px] font-mono text-muted-foreground hover:text-foreground px-1"
                     >
-                      Copy
+                      {copiedIndex() === index() ? (
+                        <Check class="h-2.5 w-2.5 text-success" />
+                      ) : (
+                        <Copy class="h-2.5 w-2.5" />
+                      )}
                     </button>
                   </Show>
                 </div>
               </div>
-              <div class={`mqtt-payload ${msg.is_binary ? 'binary' : ''}`}>
-                <pre>{formatPayload(msg.payload, msg.is_binary, msg.size, index())}</pre>
+
+              {/* Payload */}
+              <div class="px-4 pb-2">
+                <pre
+                  class={`text-[10px] font-mono p-2 bg-background border border-border overflow-auto max-h-48 ${
+                    msg.is_binary ? 'text-muted-foreground italic' : 'text-foreground/70'
+                  }`}
+                >
+                  {formatPayload(msg.payload, msg.is_binary, msg.size, index())}
+                </pre>
               </div>
             </div>
           )}
         </For>
 
-        {messages().length === 0 && (
-          <div class="no-messages">No MQTT messages yet. Messages will appear here as they arrive.</div>
-        )}
+        <Show when={messages().length === 0}>
+          <div class="flex items-center justify-center h-32 text-xs font-mono text-muted-foreground">
+            No MQTT messages yet. Messages will appear here as they arrive.
+          </div>
+        </Show>
 
-        {messages().length > 0 && filteredMessages().length === 0 && (
-          <div class="no-messages">No messages match the filter "{filter()}"</div>
-        )}
+        <Show when={messages().length > 0 && filteredMessages().length === 0}>
+          <div class="flex items-center justify-center h-32 text-xs font-mono text-muted-foreground">
+            No messages match the filter "{filter()}"
+          </div>
+        </Show>
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
+import { Plus, RefreshCw, Power, PowerOff } from 'lucide-solid'
 import CodePreview from './CodePreview'
-import './AutomationList.css'
 
 interface Automation {
   id: string
@@ -90,78 +90,101 @@ export default function AutomationList() {
   onMount(fetchAutomations)
 
   return (
-    <div class="automation-list">
-      <div class="list-panel">
-        <div class="panel-header">
-          <h2>Automations</h2>
-          <button onClick={fetchAutomations} class="refresh-btn">
-            Refresh
-          </button>
+    <div class="flex h-full">
+      {/* Sidebar */}
+      <aside class="w-64 border-r border-border p-3 overflow-auto bg-card">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-[10px] font-mono text-muted-foreground">automations</span>
+          <div class="flex gap-1">
+            <button class="p-1 text-muted-foreground hover:text-foreground transition-colors">
+              <Plus class="h-3 w-3" />
+            </button>
+            <button
+              onClick={fetchAutomations}
+              class="p-1 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <RefreshCw class="h-3 w-3" />
+            </button>
+          </div>
         </div>
 
         <Show when={loading()}>
-          <div class="loading">Loading...</div>
+          <div class="text-xs font-mono text-muted-foreground p-2">Loading...</div>
         </Show>
 
         <Show when={!loading() && automations().length === 0}>
-          <div class="empty">
+          <div class="text-xs font-mono text-muted-foreground p-2">
             No automations yet. Use the Chat tab to create one!
           </div>
         </Show>
 
-        <div class="list">
+        <div class="space-y-1">
           <For each={automations()}>
             {(automation) => (
               <div
-                class={`automation-item ${selectedId() === automation.id ? 'selected' : ''}`}
                 onClick={() => fetchAutomationCode(automation.id)}
+                class={`p-2 cursor-pointer border transition-colors ${
+                  selectedId() === automation.id
+                    ? 'border-primary/30 bg-primary/5'
+                    : 'border-border hover:border-muted-foreground/30'
+                }`}
               >
-                <div class="automation-name">{automation.config.name}</div>
-                <div class="automation-desc">{automation.config.description}</div>
-                <div class="automation-meta">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="font-mono text-xs text-foreground truncate">
+                    {automation.config.name}
+                  </span>
+                  {automation.config.enabled ? (
+                    <Power class="h-3 w-3 text-success shrink-0" />
+                  ) : (
+                    <PowerOff class="h-3 w-3 text-muted-foreground shrink-0" />
+                  )}
+                </div>
+
+                <p class="text-[10px] text-muted-foreground line-clamp-1">
+                  {automation.config.description}
+                </p>
+
+                <div class="flex items-center gap-2 mt-2">
                   <Show when={automation.config.subscribe?.length > 0}>
-                    <span class="topics">
-                      {automation.config.subscribe.length} topic(s)
+                    <span class="text-[9px] font-mono text-muted-foreground border border-border px-1">
+                      {automation.config.subscribe.length} topics
                     </span>
                   </Show>
-                  <Show when={automation.config.schedule}>
-                    <span class="schedule">Scheduled</span>
-                  </Show>
-                  <span class={`status ${automation.config.enabled ? 'enabled' : 'disabled'}`}>
-                    {automation.config.enabled ? 'Enabled' : 'Disabled'}
+                  <span
+                    class={`text-[9px] font-mono px-1 ${
+                      automation.config.enabled
+                        ? 'text-success border border-success/30'
+                        : 'text-muted-foreground border border-border'
+                    }`}
+                  >
+                    {automation.config.enabled ? 'active' : 'inactive'}
                   </span>
                 </div>
               </div>
             )}
           </For>
         </div>
-      </div>
+      </aside>
 
-      <div class="detail-panel">
+      {/* Main content */}
+      <div class="flex-1 p-4 overflow-auto">
         <Show when={selectedId()}>
-          <div class="panel-header">
-            <h2>{selectedId()}.star</h2>
-            <div class="actions">
-              <Show when={editMode()}>
-                <button onClick={saveAutomation} class="save-btn">Save</button>
-                <button onClick={() => setEditMode(false)} class="cancel-btn">Cancel</button>
-              </Show>
-              <Show when={!editMode()}>
-                <button onClick={() => setEditMode(true)} class="edit-btn">Edit</button>
-                <button onClick={() => deleteAutomation(selectedId()!)} class="delete-btn">Delete</button>
-              </Show>
-            </div>
-          </div>
           <CodePreview
             code={selectedCode()}
             filename={`${selectedId()}.star`}
+            showActions
             editable={editMode()}
             onCodeChange={setSelectedCode}
+            onEdit={() => setEditMode(true)}
+            onSave={saveAutomation}
+            onCancel={() => setEditMode(false)}
+            onDelete={() => deleteAutomation(selectedId()!)}
+            isEditing={editMode()}
           />
         </Show>
 
         <Show when={!selectedId()}>
-          <div class="no-selection">
+          <div class="flex items-center justify-center h-full text-xs font-mono text-muted-foreground">
             Select an automation to view its code
           </div>
         </Show>
